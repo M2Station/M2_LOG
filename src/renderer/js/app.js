@@ -1192,6 +1192,7 @@ document.addEventListener('keydown', (e) => {
 /* ---------- Settings modal ---------- */
 function openSettings() {
   $('#setAbbrevLen').value = abbrevLen;
+  populateThemeSelect();
   updateSettingsPreview();
   $('#settingsModal').classList.remove('hidden');
 }
@@ -1214,6 +1215,27 @@ $('#setAbbrevLen').addEventListener('input', () => {
   updateSettingsPreview();
   updateFolderPreview();
 });
+
+/* ---------- Theme selector (powered by themes.js) ---------- */
+function populateThemeSelect() {
+  const sel = $('#setTheme');
+  if (!sel || !window.M2Themes) return;
+  if (!sel.options.length) {
+    window.M2Themes.list().forEach(({ id, name }) => {
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = name;
+      sel.appendChild(opt);
+    });
+  }
+  sel.value = window.M2Themes.current();
+}
+const setThemeEl = $('#setTheme');
+if (setThemeEl) {
+  setThemeEl.addEventListener('change', () => {
+    if (window.M2Themes) window.M2Themes.apply(setThemeEl.value);
+  });
+}
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeSettings();
 });
