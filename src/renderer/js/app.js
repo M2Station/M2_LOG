@@ -880,11 +880,17 @@ async function copySummary() {
     const v = String(value == null ? '' : value).trim();
     if (v) lines.push(formatField(label, v));
   };
+  // Notes: prefix each non-empty line with "- " so they read as a bullet list.
+  const bulletizeNotes = (value) =>
+    String(value == null ? '' : value)
+      .split(/\r?\n/)
+      .map((line) => (line.trim() ? `- ${line.trim()}` : line))
+      .join('\n');
   add(t('field.expName', '實驗名稱'), $('#experimentName').value);
   add(t('field.date', '日期'), $('#date').value);
   add(t('field.tester', '測試人員'), $('#tester').value);
   add(t('field.testCase', '測試項目'), $('#testCase').value);
-  add(t('field.notes', '備註'), $('#notes').value);
+  add(t('field.notes', '備註'), bulletizeNotes($('#notes').value));
   getCustomFields().forEach((f) => {
     const label = String(f.label || '').trim();
     const value = String(f.value || '').trim();

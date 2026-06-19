@@ -59,7 +59,14 @@ function buildHeader(meta, logType) {
   (meta.customFields || []).forEach((f) => {
     if (f && (f.label || f.value)) rows.push([f.label || '(field)', f.value || '']);
   });
-  if (meta.notes && String(meta.notes).trim()) rows.push(['Notes', meta.notes]);
+  if (meta.notes && String(meta.notes).trim()) {
+    // Prefix each non-empty Notes line with "- " so they read as a bullet list.
+    const notes = String(meta.notes)
+      .split(/\r?\n/)
+      .map((line) => (line.trim() ? `- ${line.trim()}` : line))
+      .join('\n');
+    rows.push(['Notes', notes]);
+  }
   rows.push(['Log Type', logType]);
   rows.push(['Created', meta.createdAt]);
 
