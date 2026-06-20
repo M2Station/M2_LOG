@@ -87,6 +87,11 @@ function applyI18n() {
     row.querySelector('.btn-grab').setAttribute('title', t('custom.grab.title'));
     row.querySelector('.btn-remove').setAttribute('title', t('custom.remove.title'));
   });
+  // LOG analysis view: re-render dynamic widgets so their generated labels follow
+  // the language switch (level/mark chips, highlight-type select, find counter).
+  if (anaNav && anaNav.markers && anaNav.markers.length) anaRenderLevels(anaNav.markers);
+  if (typeof anaPopulateHl === 'function') anaPopulateHl();
+  if (typeof anaFindUpdateCount === 'function') anaFindUpdateCount();
 }
 
 async function loadLang(lang) {
@@ -389,6 +394,10 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])
   );
+}
+
+function escapeRegExp(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /* ---------- Experiment name -> folder preview ---------- */
@@ -957,10 +966,18 @@ const ANA_FOLDER_SVG =
 const ANA_FILE_SVG =
   '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
 const ana = { root: '', hl: 'auto', text: null, name: '' };
-const anaNav = { markers: [], targets: [], pos: -1, levels: { error: true, warn: true } };
+const anaNav = { markers: [], targets: [], pos: -1, line: -1, levels: {} };
 // Bookmarks: `lines` points at the active file's set; `store` keeps one set per
 // file path so bookmarks survive switching files and coming back (per session).
 const anaBm = { lines: new Set(), current: -1, path: '', store: new Map() };
+// In-viewer search (Ctrl+F): matches hold {line,start,end} char offsets per line;
+// highlighting uses the CSS Custom Highlight API so it layers over level spans.
+const anaFind = { q: '', matches: [], pos: -1 };
+const anaFindSupported =
+  typeof CSS !== 'undefined' && !!CSS.highlights && typeof Highlight !== 'undefined';
+// Manual highlights (right-click → Highlight): per file, like bookmarks. Each
+// term {text, level} compiles into a render rule (colours text + adds a nav chip).
+const anaMark = { terms: [], path: '', store: new Map(), seq: 0 };
 let anaReady = false;
 
 function formatBytes(n) {
@@ -1071,7 +1088,11 @@ async function anaViewFile(entry, row) {
   const ruler = document.getElementById('anaRuler');
   if (ruler) ruler.hidden = true;
   anaNav.markers = [];
+  anaNav.line = -1;
   anaNavRebuild();
+  anaFindClose();
+  const lvHost = document.getElementById('anaLevels');
+  if (lvHost) lvHost.innerHTML = '';
   // Restore (or start) the bookmark set saved for this file path so bookmarks
   // are remembered when switching away and back.
   anaBm.path = entry.path;
@@ -1083,6 +1104,14 @@ async function anaViewFile(entry, row) {
   anaBm.lines = bmSet;
   anaBm.current = -1;
   anaBmUpdateCounter();
+  // Restore manual highlights saved for this file (per-file, like bookmarks).
+  anaMark.path = entry.path;
+  let mkArr = anaMark.store.get(entry.path);
+  if (!mkArr) {
+    mkArr = [];
+    anaMark.store.set(entry.path, mkArr);
+  }
+  anaMark.terms = mkArr;
   ana.name = entry.name;
   ana.text = null;
   content.textContent = t('ana.loading');
@@ -1219,13 +1248,17 @@ function anaHighlightLine(line, rules) {
 function anaRenderContent(text, rules) {
   const el = $('#anaViewContent');
   if (!el) return;
+  // Merge per-file manual highlights into the active rules so they colour text
+  // and contribute nav chips alongside the built-in levels.
+  const baseCompiled = rules && rules.compiled ? rules.compiled : [];
+  rules = { compiled: baseCompiled.concat(anaMarkCompiled()) };
   const lines = String(text).split(/\r\n|\r|\n/);
   const markers = [];
   let html = '';
   for (let i = 0; i < lines.length; i += 1) {
     const res = anaHighlightLine(lines[i], rules);
     const lvl = res.level ? ' lvl-' + res.level : '';
-    if (res.level === 'error' || res.level === 'warn') markers.push({ i, level: res.level });
+    if (res.level) markers.push({ i, level: res.level });
     html += `<div class="ana-line${lvl}"><span class="ana-ln">${i + 1}</span><span class="ana-lc">${res.html}</span></div>`;
   }
   el.innerHTML = html;
@@ -1242,7 +1275,11 @@ function anaRenderContent(text, rules) {
   anaBuildRuler(markers, lines.length);
   anaBmUpdateCounter();
   anaNav.markers = markers;
+  anaRenderLevels(markers);
   anaNavRebuild();
+  // Rebuild search highlights over the freshly rendered DOM (e.g. after a
+  // highlight-type change) without moving the viewport.
+  if (anaFind.q) anaFindRun(anaFind.q, { keepPos: true, noScroll: true });
 }
 
 // Build the right-edge overview ruler: one colored tick per error/warn line.
@@ -1253,8 +1290,8 @@ function anaBuildRuler(markers, total) {
     if (total > 0) {
       (markers || []).forEach((m) => {
         const top = (m.i / total) * 100;
-        const cls = m.level === 'error' ? 'err' : 'warn';
-        html += `<div class="ana-ruler-tick ${cls}" style="top:${top.toFixed(3)}%" data-line="${m.i}" title="${t('ana.line')} ${m.i + 1}"></div>`;
+        const c = anaColorForLevel(m.level);
+        html += `<div class="ana-ruler-tick" style="top:${top.toFixed(3)}%;background:${c}" data-line="${m.i}" title="${t('ana.line')} ${m.i + 1}"></div>`;
       });
       anaBm.lines.forEach((i) => {
         const top = (i / total) * 100;
@@ -1291,7 +1328,7 @@ function anaUpdateRuler() {
 }
 
 // Scroll the viewer so the given line index is centered, with a brief flash.
-function anaScrollToLine(idx) {
+function anaScrollToLine(idx, opts) {
   const scroller = document.getElementById('anaScroll');
   const content = document.getElementById('anaViewContent');
   if (!scroller || !content) return;
@@ -1300,6 +1337,7 @@ function anaScrollToLine(idx) {
   const sRect = scroller.getBoundingClientRect();
   const rRect = row.getBoundingClientRect();
   scroller.scrollTop += rRect.top - sRect.top - scroller.clientHeight / 2 + rRect.height / 2;
+  if (opts && opts.noFlash) return;
   row.classList.remove('flash');
   void row.offsetWidth;
   row.classList.add('flash');
@@ -1309,7 +1347,7 @@ function anaScrollToLine(idx) {
 // Rebuild navigation targets from current markers, filtered by active levels.
 function anaNavRebuild() {
   anaNav.targets = anaNav.markers
-    .filter((m) => anaNav.levels[m.level])
+    .filter((m) => anaNav.levels[m.level] !== false)
     .map((m) => m.i)
     .sort((a, b) => a - b);
   anaNav.pos = -1;
@@ -1333,14 +1371,207 @@ function anaNavGo(dir) {
   if (!targets.length) return;
   if (anaNav.pos === -1) anaNav.pos = dir > 0 ? 0 : targets.length - 1;
   else anaNav.pos = (anaNav.pos + dir + targets.length) % targets.length;
+  anaNav.line = targets[anaNav.pos];
   anaScrollToLine(targets[anaNav.pos]);
   anaNavUpdateCounter();
 }
 
-function anaNavToggleLevel(level, btn) {
-  anaNav.levels[level] = !anaNav.levels[level];
-  if (btn) btn.classList.toggle('active', anaNav.levels[level]);
+/* ---------- Highlight levels (dynamic, expandable nav chips) ---------- */
+// Known level colors; unknown levels (e.g. BOOTMODE) get a palette color.
+const ANA_LEVEL_COLORS = { error: '#ff6b81', warn: '#fbbf24', info: '#60a5fa' };
+const ANA_LEVEL_PALETTE = ['#34d399', '#a78bfa', '#22d3ee', '#f472b6', '#f59e0b', '#38bdf8', '#c084fc', '#4ade80'];
+const ANA_BUILTIN_LEVELS = new Set(['error', 'warn', 'info']);
+const anaLevelColorMap = {};
+let anaLevelPaletteIdx = 0;
+
+function anaColorForLevel(level) {
+  if (ANA_LEVEL_COLORS[level]) return ANA_LEVEL_COLORS[level];
+  if (!anaLevelColorMap[level]) {
+    anaLevelColorMap[level] = ANA_LEVEL_PALETTE[anaLevelPaletteIdx % ANA_LEVEL_PALETTE.length];
+    anaLevelPaletteIdx += 1;
+  }
+  return anaLevelColorMap[level];
+}
+
+function anaRankOf(level) {
+  return ANA_RANK[level] || 0;
+}
+
+function anaLevelLabel(level) {
+  if (level === 'error') return t('ana.error', '錯誤');
+  if (level === 'warn') return t('ana.warning', '警告');
+  if (level === 'info') return t('ana.info', '資訊');
+  if (level === 'version') return t('ana.version', '版號');
+  if (level === 'boot') return t('ana.boot', '開機點');
+  if (level === 'membucket') return t('ana.membucket', '記憶體配置');
+  if (anaIsMarkLevel(level)) return anaMarkLabel(level);
+  return String(level || '').toUpperCase();
+}
+
+/* ---------- Manual highlights (right-click → Highlight), per file ---------- */
+function anaIsMarkLevel(lv) {
+  return anaMark.terms.some((tm) => tm.level === lv);
+}
+
+function anaMarkLabel(lv) {
+  const tm = anaMark.terms.find((t2) => t2.level === lv);
+  if (!tm) return String(lv || '').toUpperCase();
+  return tm.text.length > 22 ? tm.text.slice(0, 21) + '…' : tm.text;
+}
+
+// Compile each manual term into a render rule. Terms are matched against the
+// HTML-escaped line text, so escape the term the same way before building it.
+function anaMarkCompiled() {
+  const out = [];
+  anaMark.terms.forEach((tm) => {
+    if (!tm.text) return;
+    try {
+      out.push({ re: new RegExp(escapeRegExp(escapeHtml(tm.text)), 'gi'), level: tm.level });
+    } catch (e) {
+      /* ignore */
+    }
+  });
+  return out;
+}
+
+async function anaRerender() {
+  if (ana.text == null) return;
+  const rules = await anaResolveRules(ana.name);
+  anaRenderContent(ana.text, rules);
+}
+
+function anaMarkAdd(text) {
+  const term = String(text || '').trim();
+  if (!term) return;
+  if (/[\r\n]/.test(term)) {
+    toast(t('ana.mark.multiline', '只能標記單行文字'), 'info');
+    return;
+  }
+  if (anaMark.terms.some((tm) => tm.text.toLowerCase() === term.toLowerCase())) {
+    toast(t('ana.mark.dup', '已標記此文字'), 'info');
+    return;
+  }
+  anaMark.terms.push({ text: term, level: 'mark' + anaMark.seq });
+  anaMark.seq += 1;
+  anaRerender();
+  toast(`${t('ana.mark.added', '已加入標記')} · ${term}`, 'success');
+}
+
+function anaMarkRemove(level) {
+  const i = anaMark.terms.findIndex((tm) => tm.level === level);
+  if (i < 0) return;
+  anaMark.terms.splice(i, 1);
+  delete anaNav.levels[level];
+  anaRerender();
+}
+
+function anaMarkClear() {
+  if (!anaMark.terms.length) return;
+  anaMark.terms.forEach((tm) => delete anaNav.levels[tm.level]);
+  anaMark.terms.length = 0;
+  anaRerender();
+}
+
+// Inject color CSS for non-builtin levels + a faint whole-line tint per level.
+function anaApplyLevelStyles(levels) {
+  let css = '';
+  levels.forEach((lv) => {
+    const c = anaColorForLevel(lv);
+    if (!ANA_BUILTIN_LEVELS.has(lv)) css += `.hl-${lv}{color:${c};font-weight:600;}`;
+    if (lv !== 'error' && lv !== 'warn') {
+      css += `.ana-line.lvl-${lv}{background:color-mix(in srgb, ${c} 12%, transparent);}`;
+    }
+  });
+  let styleEl = document.getElementById('anaLevelStyles');
+  if (!styleEl) {
+    styleEl = document.createElement('style');
+    styleEl.id = 'anaLevelStyles';
+    document.head.appendChild(styleEl);
+  }
+  styleEl.textContent = css;
+}
+
+// Render one chip per level present. Main area = select (toggle into combined
+// count + up/down); trailing arrow = jump to that level individually.
+function anaRenderLevels(markers) {
+  const host = document.getElementById('anaLevels');
+  const counts = {};
+  (markers || []).forEach((m) => {
+    counts[m.level] = (counts[m.level] || 0) + 1;
+  });
+  const levels = Object.keys(counts).sort((a, b) => anaRankOf(b) - anaRankOf(a) || a.localeCompare(b));
+  levels.forEach((lv) => {
+    if (anaNav.levels[lv] === undefined) anaNav.levels[lv] = true;
+  });
+  anaApplyLevelStyles(levels);
+  if (!host) return;
+  host.innerHTML = levels
+    .map((lv) => {
+      const c = anaColorForLevel(lv);
+      const sel = anaNav.levels[lv] !== false;
+      const name = escapeHtml(anaLevelLabel(lv));
+      const isMark = anaIsMarkLevel(lv);
+      return (
+        `<div class="ana-level${sel ? ' sel' : ''}${isMark ? ' ana-level-mark' : ''}" data-level="${lv}" style="--lc:${c}">` +
+        `<button class="ana-level-main" type="button" data-i18n-title="ana.level.toggle" title="${t('ana.level.toggle', '選取：是否納入計數與上下導覽')}">` +
+        '<span class="ana-level-dot"></span>' +
+        `<span class="ana-level-name">${name}</span>` +
+        `<span class="ana-level-count">${counts[lv]}</span>` +
+        '</button>' +
+        `<button class="ana-level-jump" type="button" data-i18n-title="ana.level.jump" title="${t('ana.level.jump', '跳到下一個（Shift+點擊：上一個）')}">` +
+        '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>' +
+        '</button>' +
+        (isMark
+          ? `<button class="ana-level-remove" type="button" data-i18n-title="ana.mark.remove" title="${t('ana.mark.remove', '移除標記')}">` +
+            '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+            '</button>'
+          : '') +
+        '</div>'
+      );
+    })
+    .join('');
+}
+
+// Select: toggle whether a level counts toward the combined count + up/down.
+function anaLevelToggle(level) {
+  const selected = anaNav.levels[level] !== false;
+  anaNav.levels[level] = !selected;
+  const chip = document.querySelector(`#anaLevels .ana-level[data-level="${level}"]`);
+  if (chip) chip.classList.toggle('sel', !selected);
   anaNavRebuild();
+}
+
+// Press: jump to the next (dir=1) or previous (dir=-1) line of this level alone.
+function anaLevelGo(level, dir) {
+  const targets = anaNav.markers
+    .filter((m) => m.level === level)
+    .map((m) => m.i)
+    .sort((a, b) => a - b);
+  if (!targets.length) return;
+  const ref = anaNav.line >= 0 ? anaNav.line : anaFirstVisibleLine();
+  let target = null;
+  if (dir > 0) {
+    for (let k = 0; k < targets.length; k += 1) {
+      if (targets[k] > ref) {
+        target = targets[k];
+        break;
+      }
+    }
+    if (target == null) target = targets[0];
+  } else {
+    for (let k = targets.length - 1; k >= 0; k -= 1) {
+      if (targets[k] < ref) {
+        target = targets[k];
+        break;
+      }
+    }
+    if (target == null) target = targets[targets.length - 1];
+  }
+  anaScrollToLine(target);
+  anaNav.line = target;
+  const p = anaNav.targets.indexOf(target);
+  if (p >= 0) anaNav.pos = p;
+  anaNavUpdateCounter();
 }
 
 /* ---------- Bookmarks (Ctrl+F2 toggle · F2 next · Shift+F2 prev) ---------- */
@@ -1479,7 +1710,14 @@ $('#btnAnaCopy').addEventListener('click', async () => {
     toast(t('toast.copyFail') + e.message, 'error');
   }
 });
+// Minimap interaction: grab the viewport thumb to drag up/down (scrollbar-style),
+// or press/drag anywhere on the track to scrub. A real drag suppresses the tick click.
+let anaRulerDragged = false;
 $('#anaRuler').addEventListener('click', (e) => {
+  if (anaRulerDragged) {
+    anaRulerDragged = false;
+    return;
+  }
   const tick = e.target.closest('.ana-ruler-tick');
   if (!tick) return;
   const idx = parseInt(tick.getAttribute('data-line'), 10);
@@ -1493,19 +1731,35 @@ $('#anaRuler').addEventListener('click', (e) => {
   }
 });
 $('#anaRuler').addEventListener('mousedown', (e) => {
-  if (e.target.closest('.ana-ruler-tick')) return;
+  if (e.button !== 0) return;
   const ruler = document.getElementById('anaRuler');
   const scroller = document.getElementById('anaScroll');
+  const view = document.getElementById('anaRulerView');
   if (!ruler || !scroller) return;
   e.preventDefault();
+  anaRulerDragged = false;
   const rect = ruler.getBoundingClientRect();
-  const jump = (clientY) => {
-    const ratio = (clientY - rect.top) / rect.height;
-    const max = scroller.scrollHeight - scroller.clientHeight;
-    scroller.scrollTop = Math.max(0, Math.min(max, ratio * scroller.scrollHeight - scroller.clientHeight / 2));
+  const onThumb = !!e.target.closest('.ana-ruler-view');
+  const onTick = !!e.target.closest('.ana-ruler-tick');
+  const startY = e.clientY;
+  const grabOffset = onThumb ? e.clientY - view.getBoundingClientRect().top : 0;
+  const maxScroll = () => scroller.scrollHeight - scroller.clientHeight;
+  // Drag the thumb 1:1 with the cursor, preserving where it was grabbed.
+  const dragThumb = (clientY) => {
+    const ratio = (clientY - grabOffset - rect.top) / rect.height;
+    scroller.scrollTop = Math.max(0, Math.min(maxScroll(), ratio * scroller.scrollHeight));
   };
-  jump(e.clientY);
-  const onMove = (ev) => jump(ev.clientY);
+  // Center the viewport on the cursor (click / scrub on the track).
+  const scrub = (clientY) => {
+    const ratio = (clientY - rect.top) / rect.height;
+    scroller.scrollTop = Math.max(0, Math.min(maxScroll(), ratio * scroller.scrollHeight - scroller.clientHeight / 2));
+  };
+  if (!onThumb && !onTick) scrub(e.clientY);
+  const onMove = (ev) => {
+    if (Math.abs(ev.clientY - startY) > 3) anaRulerDragged = true;
+    if (onThumb) dragThumb(ev.clientY);
+    else scrub(ev.clientY);
+  };
   const onUp = () => {
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
@@ -1519,11 +1773,20 @@ if (document.getElementById('anaScroll')) {
   document.getElementById('anaScroll').addEventListener('scroll', anaUpdateRuler);
 }
 window.addEventListener('resize', anaUpdateRuler);
-$('#chipErr').addEventListener('click', (e) => anaNavToggleLevel('error', e.currentTarget));
-$('#chipWarn').addEventListener('click', (e) => anaNavToggleLevel('warn', e.currentTarget));
 $('#btnAnaPrev').addEventListener('click', () => anaNavGo(-1));
 $('#btnAnaNext').addEventListener('click', () => anaNavGo(1));
 $('#chipBm').addEventListener('click', () => anaBmGo(1));
+if (document.getElementById('anaLevels')) {
+  document.getElementById('anaLevels').addEventListener('click', (e) => {
+    const chip = e.target.closest('.ana-level');
+    if (!chip) return;
+    const level = chip.getAttribute('data-level');
+    if (!level) return;
+    if (e.target.closest('.ana-level-remove')) anaMarkRemove(level);
+    else if (e.target.closest('.ana-level-jump')) anaLevelGo(level, e.shiftKey ? -1 : 1);
+    else anaLevelToggle(level);
+  });
+}
 if (document.getElementById('anaViewContent')) {
   document.getElementById('anaViewContent').addEventListener('click', (e) => {
     const content = document.getElementById('anaViewContent');
@@ -1533,11 +1796,94 @@ if (document.getElementById('anaViewContent')) {
     if (idx >= 0) anaSetCurrentLine(idx);
   });
 }
+
+/* ---------- Manual-highlight context menu (right-click) ---------- */
+let anaCtxSel = '';
+let anaCtxLevel = '';
+
+function anaCtxHide() {
+  const m = document.getElementById('anaCtx');
+  if (m) m.hidden = true;
+}
+
+function anaCtxShow(x, y, items) {
+  const m = document.getElementById('anaCtx');
+  if (!m) return;
+  m.innerHTML = items
+    .map((it) => {
+      if (it.sep) return '<div class="ana-ctx-sep"></div>';
+      const dot = it.color ? `<span class="ana-ctx-dot" style="color:${it.color}"></span>` : '';
+      return `<div class="ana-ctx-item${it.danger ? ' danger' : ''}" data-act="${it.act}">${dot}<span>${escapeHtml(it.label)}</span></div>`;
+    })
+    .join('');
+  m.hidden = false;
+  const rect = m.getBoundingClientRect();
+  let left = x;
+  let top = y;
+  if (left + rect.width > window.innerWidth - 8) left = window.innerWidth - rect.width - 8;
+  if (top + rect.height > window.innerHeight - 8) top = window.innerHeight - rect.height - 8;
+  m.style.left = Math.max(8, left) + 'px';
+  m.style.top = Math.max(8, top) + 'px';
+}
+
+if (document.getElementById('anaViewContent')) {
+  document.getElementById('anaViewContent').addEventListener('contextmenu', (e) => {
+    if (ana.text == null) return;
+    const sel = (window.getSelection ? String(window.getSelection()) : '').trim();
+    const selMark = sel ? anaMark.terms.find((tm) => tm.text.toLowerCase() === sel.toLowerCase()) : null;
+    const items = [];
+    if (sel && !selMark) {
+      const short = sel.length > 24 ? sel.slice(0, 23) + '…' : sel;
+      items.push({ act: 'add', label: `${t('ana.mark.add', '標記')}「${short}」` });
+    }
+    if (selMark) {
+      items.push({ act: 'rm', color: anaColorForLevel(selMark.level), label: `${t('ana.mark.removeSel', '移除標記')}「${sel}」` });
+    }
+    if (anaMark.terms.length) {
+      if (items.length) items.push({ sep: true });
+      items.push({ act: 'clear', danger: true, label: t('ana.mark.clear', '清除所有標記') });
+    }
+    if (!items.length) return;
+    e.preventDefault();
+    anaCtxSel = sel;
+    anaCtxLevel = selMark ? selMark.level : '';
+    anaCtxShow(e.clientX, e.clientY, items);
+  });
+}
+
+if (document.getElementById('anaCtx')) {
+  document.getElementById('anaCtx').addEventListener('click', (e) => {
+    const item = e.target.closest('.ana-ctx-item');
+    if (!item) return;
+    const act = item.getAttribute('data-act');
+    anaCtxHide();
+    if (act === 'add') anaMarkAdd(anaCtxSel);
+    else if (act === 'rm') anaMarkRemove(anaCtxLevel);
+    else if (act === 'clear') anaMarkClear();
+  });
+}
+document.addEventListener('mousedown', (e) => {
+  const m = document.getElementById('anaCtx');
+  if (m && !m.hidden && !e.target.closest('#anaCtx')) anaCtxHide();
+});
+document.addEventListener('scroll', anaCtxHide, true);
 document.addEventListener('keydown', (e) => {
-  if (e.key !== 'F2' && e.key !== 'F3') return;
+  if (e.key === 'Escape') anaCtxHide();
+});
+window.addEventListener('blur', anaCtxHide);
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'F1' && e.key !== 'F2' && e.key !== 'F3') return;
   const av = document.getElementById('view-analysis');
   if (!av || !av.classList.contains('active')) return;
   if (e.key === 'F3') {
+    // Search: jump between matches (next / Shift = previous)
+    e.preventDefault();
+    anaFindGo(e.shiftKey ? -1 : 1);
+    return;
+  }
+  if (e.key === 'F1') {
+    // Error / warning markers: jump between highlighted lines
     e.preventDefault();
     anaNavGo(e.shiftKey ? -1 : 1);
     return;
@@ -1553,6 +1899,219 @@ document.addEventListener('keydown', (e) => {
     }
   } else {
     anaBmGo(e.shiftKey ? -1 : 1);
+  }
+});
+
+/* ---------- In-viewer search (Ctrl+F) ---------- */
+let anaFindDebounce = 0;
+
+function anaFindOpen() {
+  const box = document.getElementById('anaFind');
+  const input = document.getElementById('anaFindInput');
+  if (!box || !input) return;
+  box.hidden = false;
+  input.focus();
+  input.select();
+}
+
+function anaFindClose() {
+  const box = document.getElementById('anaFind');
+  if (box) box.hidden = true;
+  anaFind.q = '';
+  anaFind.matches = [];
+  anaFind.pos = -1;
+  anaFindClearHighlights();
+  anaFindUpdateCount();
+}
+
+function anaFindClearHighlights() {
+  if (!anaFindSupported) return;
+  try {
+    CSS.highlights.delete('ana-find');
+    CSS.highlights.delete('ana-find-current');
+  } catch (e) {
+    /* ignore */
+  }
+}
+
+function anaFindUpdateCount() {
+  const el = document.getElementById('anaFindCount');
+  const total = anaFind.matches.length;
+  if (el) {
+    if (!anaFind.q) {
+      el.textContent = '0/0';
+      el.classList.remove('empty');
+    } else if (!total) {
+      el.textContent = t('ana.find.none', '無結果');
+      el.classList.add('empty');
+    } else {
+      el.textContent = `${anaFind.pos + 1}/${total}`;
+      el.classList.remove('empty');
+    }
+  }
+  const prev = document.getElementById('btnAnaFindPrev');
+  const next = document.getElementById('btnAnaFindNext');
+  if (prev) prev.disabled = total === 0;
+  if (next) next.disabled = total === 0;
+}
+
+// Find all case-insensitive matches of `query` across the current file's lines.
+function anaFindCompute(query) {
+  const matches = [];
+  if (!query || ana.text == null) return matches;
+  const needle = query.toLowerCase();
+  const nlen = needle.length;
+  const lines = String(ana.text).split(/\r\n|\r|\n/);
+  const CAP = 5000;
+  for (let i = 0; i < lines.length; i += 1) {
+    const hay = lines[i].toLowerCase();
+    let at = hay.indexOf(needle);
+    while (at !== -1) {
+      matches.push({ line: i, start: at, end: at + nlen });
+      if (matches.length >= CAP) return matches;
+      at = hay.indexOf(needle, at + nlen);
+    }
+  }
+  return matches;
+}
+
+// Map a [start,end) character span within a line to a DOM Range across its text
+// nodes (lines may be split into several nodes by level-highlight spans).
+function anaFindRange(lineEl, start, end) {
+  const lc = lineEl && lineEl.querySelector('.ana-lc');
+  if (!lc) return null;
+  const walker = document.createTreeWalker(lc, NodeFilter.SHOW_TEXT, null);
+  let offset = 0;
+  let startNode = null;
+  let startOff = 0;
+  let endNode = null;
+  let endOff = 0;
+  let node = walker.nextNode();
+  while (node) {
+    const len = node.nodeValue.length;
+    if (startNode === null && start < offset + len) {
+      startNode = node;
+      startOff = start - offset;
+    }
+    if (startNode !== null && end <= offset + len) {
+      endNode = node;
+      endOff = end - offset;
+      break;
+    }
+    offset += len;
+    node = walker.nextNode();
+  }
+  if (!startNode || !endNode) return null;
+  try {
+    const range = document.createRange();
+    range.setStart(startNode, startOff);
+    range.setEnd(endNode, endOff);
+    return range;
+  } catch (e) {
+    return null;
+  }
+}
+
+function anaFindApplyHighlights() {
+  if (!anaFindSupported) return;
+  const content = document.getElementById('anaViewContent');
+  if (!content) return;
+  const all = new Highlight();
+  const cur = new Highlight();
+  for (let i = 0; i < anaFind.matches.length; i += 1) {
+    const m = anaFind.matches[i];
+    const lineEl = content.children[m.line];
+    if (!lineEl) continue;
+    const range = anaFindRange(lineEl, m.start, m.end);
+    if (!range) continue;
+    if (i === anaFind.pos) cur.add(range);
+    else all.add(range);
+  }
+  CSS.highlights.set('ana-find', all);
+  CSS.highlights.set('ana-find-current', cur);
+}
+
+function anaFindReveal() {
+  const m = anaFind.matches[anaFind.pos];
+  if (!m) return;
+  anaScrollToLine(m.line, { noFlash: true });
+  anaSetCurrentLine(m.line);
+}
+
+// Run a search. opts.keepPos preserves the active index across a re-render;
+// opts.noScroll suppresses jumping the viewport.
+function anaFindRun(query, opts) {
+  opts = opts || {};
+  anaFind.q = query || '';
+  anaFind.matches = anaFindCompute(anaFind.q);
+  if (!anaFind.matches.length) {
+    anaFind.pos = -1;
+    anaFindClearHighlights();
+    anaFindUpdateCount();
+    return;
+  }
+  if (opts.keepPos && anaFind.pos >= 0) {
+    anaFind.pos = Math.min(anaFind.pos, anaFind.matches.length - 1);
+  } else {
+    const ref = anaRefLine();
+    let pos = anaFind.matches.findIndex((m) => m.line >= ref);
+    if (pos < 0) pos = 0;
+    anaFind.pos = pos;
+  }
+  anaFindApplyHighlights();
+  anaFindUpdateCount();
+  if (!opts.noScroll) anaFindReveal();
+}
+
+function anaFindGo(dir) {
+  const total = anaFind.matches.length;
+  if (!total) return;
+  anaFind.pos = (anaFind.pos + dir + total) % total;
+  anaFindApplyHighlights();
+  anaFindUpdateCount();
+  anaFindReveal();
+}
+
+(function wireAnaFind() {
+  const input = document.getElementById('anaFindInput');
+  const prev = document.getElementById('btnAnaFindPrev');
+  const next = document.getElementById('btnAnaFindNext');
+  const close = document.getElementById('btnAnaFindClose');
+  if (input) {
+    input.addEventListener('input', () => {
+      window.clearTimeout(anaFindDebounce);
+      const q = input.value;
+      anaFindDebounce = window.setTimeout(() => anaFindRun(q), 110);
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        window.clearTimeout(anaFindDebounce);
+        if (anaFind.q !== input.value) anaFindRun(input.value);
+        else anaFindGo(e.shiftKey ? -1 : 1);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        anaFindClose();
+      }
+    });
+  }
+  if (prev) prev.addEventListener('click', () => anaFindGo(-1));
+  if (next) next.addEventListener('click', () => anaFindGo(1));
+  if (close) close.addEventListener('click', anaFindClose);
+})();
+
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
+    const av = document.getElementById('view-analysis');
+    if (!av || !av.classList.contains('active')) return;
+    e.preventDefault();
+    anaFindOpen();
+  } else if (e.key === 'Escape') {
+    const box = document.getElementById('anaFind');
+    if (box && !box.hidden) {
+      e.preventDefault();
+      anaFindClose();
+    }
   }
 });
 

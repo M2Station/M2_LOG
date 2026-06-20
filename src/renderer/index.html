@@ -230,22 +230,24 @@
             <section class="panel ana-view-panel">
               <div class="panel-head">
                 <h2 id="anaViewName" data-i18n="ana.viewer">檢視</h2>
+                <div class="log-tools">
+                  <span class="counter" id="anaViewMeta"></span>
+                  <button class="btn btn-ghost btn-sm" id="btnAnaCopy" data-i18n="ana.copy">複製</button>
+                </div>
+              </div>
+              <!-- Level navigation bar (below file name; auto-expands per highlight level) -->
+              <div class="ana-levelbar" id="anaLevelBar">
                 <div class="ana-hl">
                   <label class="ana-hl-label" for="anaHlSelect" data-i18n="ana.highlight">標記</label>
                   <select id="anaHlSelect" class="ana-hl-select"></select>
                 </div>
+                <div class="ana-levels" id="anaLevels"></div>
                 <div class="ana-nav" id="anaNav">
-                  <button class="ana-chip err active" id="chipErr" type="button" data-i18n-title="ana.filterErr" title="切換錯誤標記">
-                    <span class="ana-chip-dot"></span><span data-i18n="ana.error">錯誤</span>
-                  </button>
-                  <button class="ana-chip warn active" id="chipWarn" type="button" data-i18n-title="ana.filterWarn" title="切換警告標記">
-                    <span class="ana-chip-dot"></span><span data-i18n="ana.warning">警告</span>
-                  </button>
                   <span class="ana-nav-count" id="anaNavCount">0</span>
-                  <button class="btn btn-ghost btn-sm btn-nav" id="btnAnaPrev" type="button" data-i18n-title="ana.prev" title="上一個 (Shift+F3)" disabled>
+                  <button class="btn btn-ghost btn-sm btn-nav" id="btnAnaPrev" type="button" data-i18n-title="ana.prev" title="上一個 (Shift+F1)" disabled>
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
                   </button>
-                  <button class="btn btn-ghost btn-sm btn-nav" id="btnAnaNext" type="button" data-i18n-title="ana.next" title="下一個 (F3)" disabled>
+                  <button class="btn btn-ghost btn-sm btn-nav" id="btnAnaNext" type="button" data-i18n-title="ana.next" title="下一個 (F1)" disabled>
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
                   </button>
                   <span class="ana-nav-sep" aria-hidden="true"></span>
@@ -255,12 +257,22 @@
                     <span class="ana-bm-count" id="anaBmCount">0</span>
                   </button>
                 </div>
-                <div class="log-tools">
-                  <span class="counter" id="anaViewMeta"></span>
-                  <button class="btn btn-ghost btn-sm" id="btnAnaCopy" data-i18n="ana.copy">複製</button>
-                </div>
               </div>
               <div class="panel-body ana-view">
+                <div class="ana-find" id="anaFind" hidden>
+                  <svg class="ana-find-ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <input type="text" id="anaFindInput" class="ana-find-input" data-i18n-ph="ana.find.ph" placeholder="搜尋…" spellcheck="false" autocomplete="off" />
+                  <span class="ana-find-count" id="anaFindCount">0/0</span>
+                  <button class="btn btn-ghost btn-sm btn-nav" id="btnAnaFindPrev" type="button" data-i18n-title="ana.find.prev" title="上一個 (Shift+Enter / Shift+F3)">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+                  </button>
+                  <button class="btn btn-ghost btn-sm btn-nav" id="btnAnaFindNext" type="button" data-i18n-title="ana.find.next" title="下一個 (Enter / F3)">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                  </button>
+                  <button class="btn btn-ghost btn-sm btn-nav" id="btnAnaFindClose" type="button" data-i18n-title="ana.find.close" title="關閉 (Esc)">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  </button>
+                </div>
                 <div class="ana-scroll" id="anaScroll">
                   <div class="ana-code" id="anaViewContent"></div>
                 </div>
@@ -278,6 +290,9 @@
 
     <!-- Toasts -->
     <div class="toasts" id="toasts"></div>
+
+    <!-- Right-click highlight menu (LOG analysis) -->
+    <div class="ana-ctx" id="anaCtx" hidden></div>
 
     <!-- Settings modal -->
     <div class="modal-overlay hidden" id="settingsModal">

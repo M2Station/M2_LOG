@@ -1,5 +1,5 @@
 {
-  "_comment": "UEFI log highlight rules. Edit this file to add/adjust highlighting. Each rule: name, level (error|warn|info), pattern (JavaScript regex source, case-insensitive). Whole-line tint follows the highest level matched on that line.",
+  "_comment": "UEFI log highlight rules. Edit this file to add/adjust highlighting. Each rule: name, level (error|warn|info|version|boot|membucket), pattern (JavaScript regex source, case-insensitive). Whole-line tint follows the highest level matched on that line.",
   "rules": [
     {
       "name": "error",
@@ -15,6 +15,31 @@
       "name": "warning",
       "level": "warn",
       "pattern": "\\b(?:warn(?:ing)?|timeout|timed?\\s*out|retry|retries|retrying|skip(?:ped)?|deprecated)\\b"
+    },
+    {
+      "name": "bios-version",
+      "level": "version",
+      "pattern": "BIOS\\s+version\\s*:.*"
+    },
+    {
+      "name": "commit-sha",
+      "level": "version",
+      "pattern": "Commit\\s+SHA\\s*:.*"
+    },
+    {
+      "name": "boot-fsp-t-car-init",
+      "level": "boot",
+      "pattern": "FSP-T\\s*:\\s*CAR\\s+Init"
+    },
+    {
+      "name": "boot-exit-boot-services",
+      "level": "boot",
+      "pattern": "EBS\\s+completed\\s+successfully"
+    },
+    {
+      "name": "membucket-header",
+      "level": "membucket",
+      "pattern": "Memory\\s+Previous\\s+Current\\s+Minimum\\s+Next"
     }
   ]
 }

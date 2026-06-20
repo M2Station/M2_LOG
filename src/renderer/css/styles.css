@@ -840,12 +840,16 @@ input[type="date"] {
   padding: 0;
   position: relative;
   overflow: hidden;
+  /* Clip the minimap to the panel's rounded bottom corners so its tail
+     doesn't poke past the boundary. */
+  border-bottom-left-radius: calc(var(--radius) - 1px);
+  border-bottom-right-radius: calc(var(--radius) - 1px);
 }
 
 .ana-scroll {
   height: 100%;
   overflow: auto;
-  padding-right: 24px;
+  padding-right: 38px;
 }
 
 .ana-scroll::-webkit-scrollbar {
@@ -858,7 +862,7 @@ input[type="date"] {
   top: 0;
   right: 0;
   bottom: 0;
-  width: 22px;
+  width: 36px;
   overflow: hidden;
   background: color-mix(in srgb, var(--border) 45%, transparent);
   border-left: 1px solid var(--border);
@@ -908,20 +912,159 @@ input[type="date"] {
   position: absolute;
   left: 0;
   right: 0;
-  min-height: 18px;
-  background: rgba(130, 150, 210, 0.22);
-  border: 1px solid rgba(165, 185, 240, 0.5);
-  border-radius: 3px;
-  pointer-events: none;
+  min-height: 24px;
+  background: rgba(130, 150, 210, 0.3);
+  border: 1px solid rgba(165, 185, 240, 0.65);
+  border-radius: 4px;
+  pointer-events: auto;
+  cursor: grab;
 }
 
 .ana-ruler:hover .ana-ruler-view {
-  background: rgba(130, 150, 210, 0.32);
+  background: rgba(130, 150, 210, 0.45);
 }
 
 body.ana-ruler-dragging {
   cursor: grabbing;
   user-select: none;
+}
+
+body.ana-ruler-dragging .ana-ruler-view {
+  cursor: grabbing;
+  background: rgba(130, 150, 210, 0.55);
+}
+
+/* ---------- In-viewer search (Ctrl+F) ---------- */
+.ana-find {
+  position: absolute;
+  top: 8px;
+  right: 46px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px 5px 9px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+}
+
+.ana-find[hidden] {
+  display: none;
+}
+
+.ana-find-ic {
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+
+.ana-find-input {
+  width: 200px;
+  padding: 4px 6px;
+  font-size: 12.5px;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  outline: none;
+}
+
+.ana-find-input:focus {
+  border-color: var(--accent);
+}
+
+.ana-find-count {
+  min-width: 52px;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ana-find-count.empty {
+  color: var(--danger);
+}
+
+/* Search match highlighting via the CSS Custom Highlight API (no DOM mutation,
+   so it layers cleanly over the per-level highlight spans). */
+::highlight(ana-find) {
+  background-color: rgba(250, 204, 21, 0.4);
+}
+
+::highlight(ana-find-current) {
+  background-color: #f59e0b;
+  color: #1c1c1c;
+}
+
+/* ---------- Manual-highlight context menu + chip remove ---------- */
+.ana-ctx {
+  position: fixed;
+  z-index: 50;
+  min-width: 170px;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  font-size: 12.5px;
+  color: var(--text);
+  user-select: none;
+}
+
+.ana-ctx[hidden] {
+  display: none;
+}
+
+.ana-ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ana-ctx-item:hover {
+  background: var(--row-hover);
+}
+
+.ana-ctx-item.danger {
+  color: var(--danger);
+}
+
+.ana-ctx-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.ana-ctx-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}
+
+.ana-level-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 5px 2px 1px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.5;
+}
+
+.ana-level-remove:hover {
+  opacity: 1;
+  color: var(--danger);
 }
 
 .ana-code {
@@ -1095,6 +1238,106 @@ body.ana-ruler-dragging {
   align-self: stretch;
   margin: 2px 1px;
   background: var(--border);
+}
+
+/* ---------- Level navigation bar (below the file name, expandable) ---------- */
+.ana-levelbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  padding: 7px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ana-levelbar .ana-nav {
+  flex: 0 0 auto;
+}
+
+.ana-levels {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Each level = a pill. The main area toggles inclusion (select); the trailing
+   arrow jumps to that level individually (press). --lc holds the level color. */
+.ana-level {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+  opacity: 0.5;
+  transition: opacity 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.ana-level.sel {
+  opacity: 1;
+  border-color: color-mix(in srgb, var(--lc) 55%, var(--border));
+  background: color-mix(in srgb, var(--lc) 10%, transparent);
+}
+
+.ana-level-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px 4px 10px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.ana-level.sel .ana-level-main {
+  color: var(--lc);
+}
+
+.ana-level-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--lc);
+  flex: 0 0 auto;
+}
+
+.ana-level-name {
+  white-space: nowrap;
+}
+
+.ana-level-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+
+.ana-level.sel .ana-level-count {
+  color: color-mix(in srgb, var(--lc) 70%, var(--text));
+}
+
+.ana-level-jump {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 7px;
+  background: transparent;
+  border: 0;
+  border-left: 1px solid var(--border);
+  cursor: pointer;
+  color: var(--lc);
+  opacity: 0.85;
+}
+
+.ana-level-jump:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--lc) 18%, transparent);
 }
 
 .ana-chip.active {
