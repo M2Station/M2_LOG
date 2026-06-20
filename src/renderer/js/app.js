@@ -958,7 +958,9 @@ const ANA_FILE_SVG =
   '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
 const ana = { root: '', hl: 'auto', text: null, name: '' };
 const anaNav = { markers: [], targets: [], pos: -1, levels: { error: true, warn: true } };
-const anaBm = { lines: new Set(), current: -1 };
+// Bookmarks: `lines` points at the active file's set; `store` keeps one set per
+// file path so bookmarks survive switching files and coming back (per session).
+const anaBm = { lines: new Set(), current: -1, path: '', store: new Map() };
 let anaReady = false;
 
 function formatBytes(n) {
@@ -1070,7 +1072,15 @@ async function anaViewFile(entry, row) {
   if (ruler) ruler.hidden = true;
   anaNav.markers = [];
   anaNavRebuild();
-  anaBm.lines.clear();
+  // Restore (or start) the bookmark set saved for this file path so bookmarks
+  // are remembered when switching away and back.
+  anaBm.path = entry.path;
+  let bmSet = anaBm.store.get(entry.path);
+  if (!bmSet) {
+    bmSet = new Set();
+    anaBm.store.set(entry.path, bmSet);
+  }
+  anaBm.lines = bmSet;
   anaBm.current = -1;
   anaBmUpdateCounter();
   ana.name = entry.name;
