@@ -89,6 +89,8 @@
   "ana.version": "Version",
   "ana.boot": "Boot Point",
   "ana.membucket": "Memory Bucket",
+  "ana.powerseq": "PowerSequence",
+  "ana.uefissh": "UEFI_SSH",
   "ana.level.toggle": "Select: include in count / up-down navigation",
   "ana.level.jump": "Jump to next (Shift+click: previous)",
   "ana.find.ph": "Search…",

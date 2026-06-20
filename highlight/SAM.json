@@ -1,5 +1,5 @@
 {
-  "_comment": "SAM log highlight rules. Edit this file to add/adjust highlighting. Each rule: name, level (error|warn|info), pattern (JavaScript regex source, case-insensitive). Whole-line tint follows the highest level matched on that line.",
+  "_comment": "SAM log highlight rules. Edit this file to add/adjust highlighting. Each rule: name, level (error|warn|info, or a custom level e.g. powerseq), pattern (JavaScript regex source, case-insensitive). Whole-line tint follows the highest level matched on that line.",
   "rules": [
     {
       "name": "error",
@@ -10,6 +10,16 @@
       "name": "warning",
       "level": "warn",
       "pattern": "\\b(?:warn(?:ing)?|timeout|timed?\\s*out|retry|retries|retrying|busy|skip(?:ped)?)\\b"
+    },
+    {
+      "name": "PowerSequence",
+      "level": "powerseq",
+      "pattern": "-{3,}(?:Start\\s+[A-Za-z0-9]+\\s*->\\s*[A-Za-z0-9]+|Press\\s+Power\\s+Button)-{3,}"
+    },
+    {
+      "name": "UEFI_SSH",
+      "level": "uefissh",
+      "pattern": "Received\\s+(?:GetCapabilities|GetDebugCardPresence|GetBoardIdEx|GetTdmBoardId|GetPcbaTestMode|ChangeBootPolicyBits|GetSecureBootFuseStatusCustomer)\\b"
     }
   ]
 }

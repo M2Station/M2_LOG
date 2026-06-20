@@ -1123,6 +1123,7 @@ async function anaViewFile(entry, row) {
   let text = res.content;
   if (res.truncated) text += `\n\n... [${t('ana.truncated')}]`;
   ana.text = text;
+  anaInvalidateRulesCache();
   const rules = await anaResolveRules(entry.name);
   anaRenderContent(text, rules);
   $('#anaViewMeta').textContent = formatBytes(res.size) + (res.truncated ? ' · ' + t('ana.truncated') : '');
@@ -1130,6 +1131,12 @@ async function anaViewFile(entry, row) {
 
 /* ---------- Highlight rules (per LOG type, loaded from /highlight) ---------- */
 const anaRulesCache = {};
+
+// Drop cached compiled rules so edits to the highlight JSON take effect the next
+// time a file is opened, without needing to restart the app.
+function anaInvalidateRulesCache() {
+  Object.keys(anaRulesCache).forEach((k) => delete anaRulesCache[k]);
+}
 
 function anaCompileRules(ruleList) {
   const compiled = [];
@@ -1210,14 +1217,17 @@ async function anaPopulateHl() {
 const ANA_RANK = { info: 1, warn: 2, error: 3 };
 
 function anaHighlightLine(line, rules) {
-  const escaped = escapeHtml(line);
+  // Match against the RAW text (not HTML-escaped) so patterns can use real
+  // characters like ->, <, > and &. Each emitted segment is escaped on output,
+  // so the rendered HTML stays safe.
+  const raw = String(line);
   const compiled = rules && rules.compiled;
-  if (!compiled || !compiled.length) return { html: escaped, level: '' };
+  if (!compiled || !compiled.length) return { html: escapeHtml(raw), level: '', tint: '' };
   const intervals = [];
   compiled.forEach((c) => {
     c.re.lastIndex = 0;
     let m;
-    while ((m = c.re.exec(escaped)) !== null) {
+    while ((m = c.re.exec(raw)) !== null) {
       if (m[0] === '') {
         c.re.lastIndex += 1;
         continue;
@@ -1225,24 +1235,33 @@ function anaHighlightLine(line, rules) {
       intervals.push({ s: m.index, e: m.index + m[0].length, level: c.level, r: ANA_RANK[c.level] || 1 });
     }
   });
-  if (!intervals.length) return { html: escaped, level: '' };
+  if (!intervals.length) return { html: escapeHtml(raw), level: '', tint: '' };
   intervals.sort((a, b) => a.s - b.s || b.r - a.r);
   let out = '';
   let pos = 0;
-  let maxRank = 0;
+  let maxRank = 0; // highest level among all matches -> marker (chips / ruler / nav)
   let maxLevel = '';
+  let tintRank = 0; // highest level among *enabled* matches -> inline colour + line tint
+  let tintLevel = '';
   intervals.forEach((iv) => {
     if (iv.s < pos) return;
-    if (iv.s > pos) out += escaped.slice(pos, iv.s);
-    out += `<span class="hl-${iv.level}">${escaped.slice(iv.s, iv.e)}</span>`;
+    if (iv.s > pos) out += escapeHtml(raw.slice(pos, iv.s));
+    const enabled = anaNav.levels[iv.level] !== false;
+    const seg = escapeHtml(raw.slice(iv.s, iv.e));
+    if (enabled) out += `<span class="hl-${iv.level}">${seg}</span>`;
+    else out += seg;
     pos = iv.e;
     if (iv.r > maxRank) {
       maxRank = iv.r;
       maxLevel = iv.level;
     }
+    if (enabled && iv.r > tintRank) {
+      tintRank = iv.r;
+      tintLevel = iv.level;
+    }
   });
-  out += escaped.slice(pos);
-  return { html: out, level: maxLevel };
+  out += escapeHtml(raw.slice(pos));
+  return { html: out, level: maxLevel, tint: tintLevel };
 }
 
 function anaRenderContent(text, rules) {
@@ -1257,7 +1276,7 @@ function anaRenderContent(text, rules) {
   let html = '';
   for (let i = 0; i < lines.length; i += 1) {
     const res = anaHighlightLine(lines[i], rules);
-    const lvl = res.level ? ' lvl-' + res.level : '';
+    const lvl = res.tint ? ' lvl-' + res.tint : '';
     if (res.level) markers.push({ i, level: res.level });
     html += `<div class="ana-line${lvl}"><span class="ana-ln">${i + 1}</span><span class="ana-lc">${res.html}</span></div>`;
   }
@@ -1289,6 +1308,8 @@ function anaBuildRuler(markers, total) {
     let html = '';
     if (total > 0) {
       (markers || []).forEach((m) => {
+        // Hide ticks for deselected levels so the minimap matches the content.
+        if (anaNav.levels[m.level] === false) return;
         const top = (m.i / total) * 100;
         const c = anaColorForLevel(m.level);
         html += `<div class="ana-ruler-tick" style="top:${top.toFixed(3)}%;background:${c}" data-line="${m.i}" title="${t('ana.line')} ${m.i + 1}"></div>`;
@@ -1365,14 +1386,36 @@ function anaNavUpdateCounter() {
   if (next) next.disabled = total === 0;
 }
 
-// Jump to the next (dir=1) or previous (dir=-1) matching line; wraps around.
+// Jump to the next (dir=1) or previous (dir=-1) matching line, anchored on the
+// selected/clicked line (falls back to the first visible line); wraps around.
+// Each jump moves the current line so repeated presses keep stepping in `dir`.
 function anaNavGo(dir) {
   const targets = anaNav.targets;
   if (!targets.length) return;
-  if (anaNav.pos === -1) anaNav.pos = dir > 0 ? 0 : targets.length - 1;
-  else anaNav.pos = (anaNav.pos + dir + targets.length) % targets.length;
-  anaNav.line = targets[anaNav.pos];
-  anaScrollToLine(targets[anaNav.pos]);
+  const ref = anaRefLine();
+  let target = null;
+  if (dir > 0) {
+    for (let k = 0; k < targets.length; k += 1) {
+      if (targets[k] > ref) {
+        target = targets[k];
+        break;
+      }
+    }
+    if (target == null) target = targets[0];
+  } else {
+    for (let k = targets.length - 1; k >= 0; k -= 1) {
+      if (targets[k] < ref) {
+        target = targets[k];
+        break;
+      }
+    }
+    if (target == null) target = targets[targets.length - 1];
+  }
+  anaNav.line = target;
+  const p = targets.indexOf(target);
+  if (p >= 0) anaNav.pos = p;
+  anaSetCurrentLine(target);
+  anaScrollToLine(target);
   anaNavUpdateCounter();
 }
 
@@ -1404,6 +1447,8 @@ function anaLevelLabel(level) {
   if (level === 'version') return t('ana.version', '版號');
   if (level === 'boot') return t('ana.boot', '開機點');
   if (level === 'membucket') return t('ana.membucket', '記憶體配置');
+  if (level === 'powerseq') return t('ana.powerseq', 'PowerSequence');
+  if (level === 'uefissh') return t('ana.uefissh', 'UEFI_SSH');
   if (anaIsMarkLevel(level)) return anaMarkLabel(level);
   return String(level || '').toUpperCase();
 }
@@ -1420,13 +1465,14 @@ function anaMarkLabel(lv) {
 }
 
 // Compile each manual term into a render rule. Terms are matched against the
-// HTML-escaped line text, so escape the term the same way before building it.
+// raw line text (output is escaped per-segment), so build the regex from the
+// raw term.
 function anaMarkCompiled() {
   const out = [];
   anaMark.terms.forEach((tm) => {
     if (!tm.text) return;
     try {
-      out.push({ re: new RegExp(escapeRegExp(escapeHtml(tm.text)), 'gi'), level: tm.level });
+      out.push({ re: new RegExp(escapeRegExp(tm.text), 'gi'), level: tm.level });
     } catch (e) {
       /* ignore */
     }
@@ -1532,13 +1578,21 @@ function anaRenderLevels(markers) {
     .join('');
 }
 
-// Select: toggle whether a level counts toward the combined count + up/down.
+// Select: toggle whether a level is highlighted in the log + counts toward the
+// combined count and up/down navigation. Deselecting also hides that level's
+// inline colour and line tint in the content (chip count + minimap ticks stay).
 function anaLevelToggle(level) {
   const selected = anaNav.levels[level] !== false;
   anaNav.levels[level] = !selected;
   const chip = document.querySelector(`#anaLevels .ana-level[data-level="${level}"]`);
   if (chip) chip.classList.toggle('sel', !selected);
   anaNavRebuild();
+  // Re-render so the inline highlight follows the toggle, keeping scroll position.
+  const scroller = document.getElementById('anaScroll');
+  const top = scroller ? scroller.scrollTop : 0;
+  anaRerender().then(() => {
+    if (scroller) scroller.scrollTop = top;
+  });
 }
 
 // Press: jump to the next (dir=1) or previous (dir=-1) line of this level alone.
@@ -1548,7 +1602,7 @@ function anaLevelGo(level, dir) {
     .map((m) => m.i)
     .sort((a, b) => a - b);
   if (!targets.length) return;
-  const ref = anaNav.line >= 0 ? anaNav.line : anaFirstVisibleLine();
+  const ref = anaRefLine();
   let target = null;
   if (dir > 0) {
     for (let k = 0; k < targets.length; k += 1) {
@@ -1567,10 +1621,11 @@ function anaLevelGo(level, dir) {
     }
     if (target == null) target = targets[targets.length - 1];
   }
-  anaScrollToLine(target);
   anaNav.line = target;
   const p = anaNav.targets.indexOf(target);
   if (p >= 0) anaNav.pos = p;
+  anaSetCurrentLine(target);
+  anaScrollToLine(target);
   anaNavUpdateCounter();
 }
 
