@@ -20,6 +20,19 @@ function registerIpc() {
   // Return the app version (from package.json) for display in the UI.
   ipcMain.handle('app:version', async () => app.getVersion());
 
+  // Cache the current theme background so the next launch can show the window
+  // instantly with the correct color (avoids a white flash on cold start).
+  ipcMain.handle('app:setStartupBg', async (_evt, color) => {
+    try {
+      if (typeof color !== 'string' || !/^#[0-9a-fA-F]{3,8}$/.test(color)) return false;
+      const p = path.join(app.getPath('userData'), 'startup.json');
+      fs.writeFileSync(p, JSON.stringify({ bg: color }));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  });
+
   // Export logs to a generated folder (+ info.json + zip).
   ipcMain.handle('log:export', async (_evt, payload) => {
     try {

@@ -9,10 +9,25 @@
 'use strict';
 
 const path = require('path');
+const fs = require('fs');
 const { app, BrowserWindow, Menu } = require('electron');
 const { registerIpc } = require('./ipc');
 
 let mainWindow = null;
+
+// Background color shown the instant the window appears (before the renderer
+// paints). Cached from the user's last theme so dark-theme users don't get a
+// white flash. Falls back to the default "Daylight" light background.
+function startupBackground() {
+  try {
+    const p = path.join(app.getPath('userData'), 'startup.json');
+    const j = JSON.parse(fs.readFileSync(p, 'utf8'));
+    if (j && typeof j.bg === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(j.bg)) return j.bg;
+  } catch (e) {
+    /* no cache yet - use default */
+  }
+  return '#f4f4f4';
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -20,7 +35,8 @@ function createWindow() {
     height: 800,
     minWidth: 900,
     minHeight: 600,
-    show: false,
+    show: true,
+    backgroundColor: startupBackground(),
     title: 'M2 LOG v' + app.getVersion(),
     icon: path.join(__dirname, '..', 'assets', 'icon.png'),
     webPreferences: {
@@ -31,7 +47,6 @@ function createWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
-  mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.on('closed', () => {
     mainWindow = null;
   });

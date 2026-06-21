@@ -200,6 +200,15 @@
     } catch (_e) {
       /* ignore */
     }
+    // Cache this theme's background so the next cold start can paint the window
+    // with the right color instantly (perceived faster launch).
+    try {
+      if (window.m2log && typeof window.m2log.setStartupBg === 'function') {
+        window.m2log.setStartupBg(vars['--bg']);
+      }
+    } catch (_e) {
+      /* ignore */
+    }
     try {
       window.dispatchEvent(new CustomEvent('m2-theme-changed', { detail: { theme: themeId } }));
     } catch (_e) {
