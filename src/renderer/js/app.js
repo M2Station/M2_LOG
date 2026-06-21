@@ -2579,3 +2579,17 @@ renderExpTabs();
 if (!$('#date').value) $('#date').value = todayStr();
 updateFolderPreview();
 loadLang(currentLang);
+
+// Show the app version next to the title (e.g. "v1.0.0").
+(async () => {
+  try {
+    const v = await window.m2log.appVersion();
+    if (!v) return;
+    const el = document.getElementById('appVersion');
+    if (el) el.textContent = 'v' + v;
+    // Also reflect the version in the window/taskbar title.
+    document.title = 'M2 LOG Tool v' + v;
+  } catch (e) {
+    /* version is non-essential; ignore failures */
+  }
+})();

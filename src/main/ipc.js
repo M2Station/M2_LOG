@@ -17,6 +17,9 @@ const { defaultOutputDir, appBaseDir } = require('./paths');
 
 /** Register all IPC handlers used by the renderer through the preload bridge. */
 function registerIpc() {
+  // Return the app version (from package.json) for display in the UI.
+  ipcMain.handle('app:version', async () => app.getVersion());
+
   // Export logs to a generated folder (+ info.json + zip).
   ipcMain.handle('log:export', async (_evt, payload) => {
     try {
