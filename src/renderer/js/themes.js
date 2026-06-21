@@ -1,3 +1,11 @@
+/*
+ * M2_LOG
+ * Copyright (c) 2026 OA Hsiao
+ * SPDX-License-Identifier: MIT
+ *
+ * This source code is licensed under the MIT License found in the
+ * LICENSE file in the root directory of this source tree.
+ */
 // ============================================================
 // M2_LOG - theme registry (ported from M2_SCOUT's visual language)
 // Applies a set of CSS custom properties to <html> and persists the
