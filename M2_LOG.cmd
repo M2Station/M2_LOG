@@ -1,6 +1,6 @@
 @echo off
 REM ============================================================
-REM  M2 LOG Tool - launcher
+REM  M2 LOG - launcher
 REM  Installs Node.js (if missing) and dependencies, then starts.
 REM ============================================================
 setlocal enableextensions
@@ -26,7 +26,7 @@ if not exist "node_modules" (
     )
 )
 
-echo [INFO] Starting M2 LOG Tool ...
+echo [INFO] Starting M2 LOG ...
 set "ELECTRON=node_modules\electron\dist\electron.exe"
 if exist "%ELECTRON%" (
     REM Launch the Electron GUI exe directly and detached, so the launcher

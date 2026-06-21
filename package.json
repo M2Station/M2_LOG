@@ -39,7 +39,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "M2 LOG Tool"
+      "shortcutName": "M2 LOG"
     }
   },
   "keywords": [

@@ -6,7 +6,7 @@
  * This source code is licensed under the MIT License found in the
  * LICENSE file in the root directory of this source tree.
  */
-// M2 LOG Tool - renderer logic (talks to the main process via window.m2log)
+// M2 LOG - renderer logic (talks to the main process via window.m2log)
 const $ = (sel) => document.querySelector(sel);
 
 const state = {
@@ -2588,7 +2588,7 @@ loadLang(currentLang);
     const el = document.getElementById('appVersion');
     if (el) el.textContent = 'v' + v;
     // Also reflect the version in the window/taskbar title.
-    document.title = 'M2 LOG Tool v' + v;
+    document.title = 'M2 LOG v' + v;
   } catch (e) {
     /* version is non-essential; ignore failures */
   }
