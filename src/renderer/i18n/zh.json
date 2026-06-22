@@ -104,6 +104,7 @@
   "ana.membucket": "記憶體配置",
   "ana.powerseq": "電源序列",
   "ana.uefissh": "UEFI_SSH",
+  "ana.pd": "PD",
   "ana.level.toggle": "選取：是否納入計數與上下導覽",
   "ana.level.jump": "跳到下一個（Shift+點擊：上一個）",
   "ana.find.ph": "搜尋…",

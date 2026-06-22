@@ -20,6 +20,16 @@
       "name": "UEFI_SSH",
       "level": "uefissh",
       "pattern": "Received\\s+(?:GetCapabilities|GetDebugCardPresence|GetBoardIdEx|GetTdmBoardId|GetPcbaTestMode|ChangeBootPolicyBits|GetSecureBootFuseStatusCustomer|UefiEfiGetTime|UefiEfiSetTime|GetRuntimeMode|GetSamFwVersion|GetProductInfo|GetRestartReasonExt|GetRestartReason)\\b"
+    },
+    {
+      "name": "UEFI_SSH_SocDisplayTakeOver",
+      "level": "uefissh",
+      "pattern": "SOC\\s+display\\s+take\\s+over"
+    },
+    {
+      "name": "PD",
+      "level": "pd",
+      "pattern": "PD\\s+FW\\s+version\\s+is\\s+valid\\s*:.*"
     }
   ]
 }

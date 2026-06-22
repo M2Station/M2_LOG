@@ -1866,6 +1866,7 @@ function anaLevelLabel(level) {
   if (level === 'membucket') return t('ana.membucket', '記憶體配置');
   if (level === 'powerseq') return t('ana.powerseq', 'PowerSequence');
   if (level === 'uefissh') return t('ana.uefissh', 'UEFI_SSH');
+  if (level === 'pd') return t('ana.pd', 'PD');
   if (anaIsMarkLevel(level)) return anaMarkLabel(level);
   return String(level || '').toUpperCase();
 }
