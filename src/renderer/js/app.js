@@ -984,6 +984,7 @@ const ANA_HL_KEY = 'm2log_ana_hl';
 const ANA_FONT_KEY = 'm2log_ana_font';
 const ANA_ROOT_KEY = 'm2log_ana_root';
 const ANA_FILE_KEY = 'm2log_ana_file';
+const ANA_FOLD_KEY = 'm2log_ana_fold';
 function clampAnaFont(n) {
   return Number.isFinite(n) ? Math.min(24, Math.max(9, n)) : 12.5;
 }
@@ -994,7 +995,13 @@ const ana = {
   name: '',
   lines: null,
   font: clampAnaFont(parseFloat(localStorage.getItem(ANA_FONT_KEY))),
+  // Fold (collapse) the runs of lines that carry no highlight, leaving only the
+  // highlighted lines visible. Default off; persisted (set to '1' to enable).
+  fold: localStorage.getItem(ANA_FOLD_KEY) === '1',
 };
+// Which collapsed runs are currently expanded, keyed by the run's first line
+// index. Reset whenever a file is (re)rendered.
+const anaFold = { open: new Set() };
 const anaNav = { markers: [], targets: [], pos: -1, line: -1, levels: {} };
 // Bookmarks: `lines` points at the active file's set; `store` keeps one set per
 // file path so bookmarks survive switching files and coming back (per session).
@@ -1054,6 +1061,8 @@ function anaApplyViewPrefs() {
     el.classList.add('nowrap');
     el.style.fontSize = ana.font + 'px';
   }
+  const fb = document.getElementById('btnAnaFold');
+  if (fb) fb.classList.toggle('on', ana.fold);
 }
 
 function anaSetFont(px) {
@@ -1683,7 +1692,145 @@ function anaHighlightLine(line, rules) {
 // (nowrap; long lines scroll horizontally), so the total scroll height is
 // total*lineH and the visible window is derived from scrollTop. Two spacer divs
 // hold the off-screen height above and below the rendered window.
-const anaVirt = { lines: null, rules: null, total: 0, lineH: 19, start: -1, end: -1, scheduled: false };
+// Folding adds a "row" layer on top of the raw lines: the viewer virtualizes
+// over `rows` (each row is either a real line or a collapsed-run placeholder),
+// not over the lines directly. `lineRow[i]` is the row that renders line i (-1
+// when it is hidden inside a collapsed run); `lineDisplayRow[i]` is the row that
+// visually represents line i on screen (its own row, or the fold placeholder of
+// its run) and is used for ruler/scroll positioning. `hlSet` holds the indices
+// of highlighted (never-folded) lines.
+const anaVirt = {
+  lines: null,
+  rules: null,
+  total: 0,
+  lineH: 19,
+  start: -1,
+  end: -1,
+  scheduled: false,
+  rows: null,
+  rowCount: 0,
+  lineRow: null,
+  lineDisplayRow: null,
+  hlSet: null,
+};
+
+// Build the row model from the current lines + highlight markers + fold state.
+// When folding is off (or there are no lines) every line is its own row. When
+// on, consecutive non-highlighted lines collapse into a single fold row; runs
+// listed in anaFold.open also emit their line rows after the fold header.
+function anaBuildRows() {
+  const total = anaVirt.total;
+  const rows = [];
+  const lineRow = total ? new Int32Array(total).fill(-1) : new Int32Array(0);
+  const dispRow = total ? new Int32Array(total) : new Int32Array(0);
+  const hl = anaVirt.hlSet;
+  if (!ana.fold || !hl || !total) {
+    for (let i = 0; i < total; i += 1) {
+      lineRow[i] = rows.length;
+      dispRow[i] = rows.length;
+      rows.push({ line: i });
+    }
+  } else {
+    let i = 0;
+    while (i < total) {
+      if (hl.has(i)) {
+        lineRow[i] = rows.length;
+        dispRow[i] = rows.length;
+        rows.push({ line: i });
+        i += 1;
+      } else {
+        const a = i;
+        while (i < total && !hl.has(i)) i += 1;
+        const count = i - a;
+        const open = anaFold.open.has(a);
+        if (open) {
+          // Expanded: a collapse bar above and below the revealed lines so the
+          // run can be re-folded from either end.
+          rows.push({ fold: true, start: a, count, open: true });
+          for (let j = a; j < i; j += 1) {
+            lineRow[j] = rows.length;
+            dispRow[j] = rows.length;
+            rows.push({ line: j });
+          }
+          rows.push({ fold: true, start: a, count, open: true, foot: true });
+        } else {
+          const foldRowIdx = rows.length;
+          rows.push({ fold: true, start: a, count, open: false });
+          for (let j = a; j < i; j += 1) {
+            dispRow[j] = foldRowIdx; // collapsed: represented by the fold bar
+          }
+        }
+      }
+    }
+  }
+  anaVirt.rows = rows;
+  anaVirt.rowCount = rows.length;
+  anaVirt.lineRow = lineRow;
+  anaVirt.lineDisplayRow = dispRow;
+}
+
+// Expand the collapsed run that contains `idx` (if any) so the line becomes
+// visible. Returns true when a rebuild happened.
+function anaFoldOpenForLine(idx) {
+  if (!ana.fold || !anaVirt.hlSet || idx == null || idx < 0 || idx >= anaVirt.total) return false;
+  if (anaVirt.hlSet.has(idx)) return false; // highlighted lines are never folded
+  if (anaVirt.lineRow && anaVirt.lineRow[idx] >= 0) return false; // already visible
+  let a = idx;
+  while (a > 0 && !anaVirt.hlSet.has(a - 1)) a -= 1;
+  anaFold.open.add(a);
+  anaBuildRows();
+  return true;
+}
+
+// Rebuild rows + DOM after a fold change, keeping `anchorLine` in view.
+function anaFoldApply(anchorLine) {
+  anaBuildRows();
+  anaVirt.start = -1;
+  anaVirt.end = -1;
+  const scroller = document.getElementById('anaScroll');
+  const lineH = anaVirt.lineH || 19;
+  if (scroller && anchorLine != null && anchorLine >= 0 && anaVirt.lineDisplayRow) {
+    const dr = anaVirt.lineDisplayRow[anchorLine];
+    if (dr >= 0) {
+      scroller.scrollTop = Math.max(0, dr * lineH - scroller.clientHeight / 2 + lineH / 2);
+    }
+  }
+  anaVirtRender();
+  anaBuildRuler(anaNav.markers, anaVirt.total);
+  anaUpdateRuler();
+}
+
+// Flash the lines of a just-expanded run (once, slowly) so the user can see
+// which section opened. Best-effort: only the lines currently in the rendered
+// window animate; off-screen lines are ignored.
+function anaFoldFlashRun(start) {
+  if (start == null || start < 0 || !anaVirt.hlSet) return;
+  let end = start;
+  while (end < anaVirt.total && !anaVirt.hlSet.has(end)) end += 1;
+  for (let i = start; i < end; i += 1) {
+    const el = anaLineEl(i);
+    if (!el) continue;
+    el.classList.remove('foldflash');
+    void el.offsetWidth; // restart the animation if the class lingered
+    el.classList.add('foldflash');
+  }
+  window.setTimeout(() => {
+    for (let i = start; i < end; i += 1) {
+      const el = anaLineEl(i);
+      if (el) el.classList.remove('foldflash');
+    }
+  }, 1300);
+}
+
+// Toolbar toggle: fold/unfold the non-highlighted runs.
+function anaToggleFold() {
+  ana.fold = !ana.fold;
+  localStorage.setItem(ANA_FOLD_KEY, ana.fold ? '1' : '0');
+  const btn = document.getElementById('btnAnaFold');
+  if (btn) btn.classList.toggle('on', ana.fold);
+  if (ana.fold) anaFold.open.clear();
+  if (anaVirt.lines) anaFoldApply(anaFirstVisibleLine());
+}
 
 // Measure one rendered line's height (depends on the current font size).
 function anaMeasureLineH(el) {
@@ -1697,22 +1844,25 @@ function anaMeasureLineH(el) {
   return h || 19;
 }
 
-// The DOM element for line `idx`, or null if it is outside the rendered window.
-// Children layout: [topSpacer, ...windowLines, bottomSpacer].
+// The DOM element for line `idx`, or null if it is outside the rendered window
+// or hidden inside a collapsed fold. Children layout: [topSpacer, ...windowRows,
+// bottomSpacer]; line `idx` lives at row `lineRow[idx]`.
 function anaLineEl(idx) {
-  if (idx == null || idx < anaVirt.start || idx >= anaVirt.end) return null;
+  if (idx == null || idx < 0) return null;
+  const r = anaVirt.lineRow && idx < anaVirt.lineRow.length ? anaVirt.lineRow[idx] : idx;
+  if (r < 0 || r < anaVirt.start || r >= anaVirt.end) return null;
   const el = document.getElementById('anaViewContent');
-  return el ? el.children[1 + (idx - anaVirt.start)] || null : null;
+  return el ? el.children[1 + (r - anaVirt.start)] || null : null;
 }
 
-// Render the window of lines visible at the current scroll position.
+// Render the window of rows visible at the current scroll position.
 function anaVirtRender() {
   anaVirt.scheduled = false;
   const el = document.getElementById('anaViewContent');
   const scroller = document.getElementById('anaScroll');
-  if (!el || !scroller || !anaVirt.lines) return;
+  if (!el || !scroller || !anaVirt.lines || !anaVirt.rows) return;
   const lineH = anaVirt.lineH || 19;
-  const total = anaVirt.total;
+  const total = anaVirt.rowCount;
   const buffer = 40;
   const firstVis = Math.floor(scroller.scrollTop / lineH);
   const lastVis = Math.ceil((scroller.scrollTop + scroller.clientHeight) / lineH);
@@ -1734,12 +1884,27 @@ function anaVirtRender() {
   anaVirt.start = start;
   anaVirt.end = end;
 
+  const rows = anaVirt.rows;
   const lines = anaVirt.lines;
   const rules = anaVirt.rules;
   const cur = anaBm.current;
   const bm = anaBm.lines;
   let html = '<div class="ana-vpad" style="height:' + start * lineH + 'px"></div>';
-  for (let i = start; i < end; i += 1) {
+  for (let r = start; r < end; r += 1) {
+    const row = rows[r];
+    if (row.fold) {
+      const title = row.open
+        ? t('ana.fold', '收折')
+        : t('ana.fold.lines', '{n} hidden lines').replace('{n}', row.count);
+      const label = row.open ? escapeHtml(t('ana.fold', '收折')) : String(row.count);
+      const cls = 'ana-foldrow' + (row.open ? ' open' : '') + (row.foot ? ' foot' : '');
+      html +=
+        '<div class="' + cls + '" data-fold="' + row.start + '" style="height:' + lineH + 'px" title="' + title + '">' +
+        '<span class="ana-fold-bar"><span class="ana-fold-ic"></span>' +
+        '<span class="ana-fold-n">' + label + '</span></span></div>';
+      continue;
+    }
+    const i = row.line;
     const res = anaHighlightLine(lines[i], rules);
     const lvl = res.tint ? ' lvl-' + res.tint : '';
     const b = bm.has(i) ? ' bookmarked' : '';
@@ -1789,6 +1954,9 @@ function anaRenderContent(text, rules) {
   anaVirt.total = total;
   anaVirt.start = -1;
   anaVirt.end = -1;
+  // Highlighted lines never fold; collapse all non-highlighted runs by default.
+  anaVirt.hlSet = new Set(markers.map((m) => m.i));
+  anaFold.open.clear();
 
   el.classList.add('nowrap'); // virtualization needs a fixed line height
   el.innerHTML = '';
@@ -1797,6 +1965,7 @@ function anaRenderContent(text, rules) {
   if (scroller) scroller.scrollTop = 0;
 
   anaNav.markers = markers;
+  anaBuildRows();
   anaVirtRender();
 
   anaBuildRuler(markers, total);
@@ -1813,16 +1982,25 @@ function anaBuildRuler(markers, total) {
   const ticks = document.getElementById('anaRulerTicks');
   if (ticks) {
     let html = '';
+    // Position ticks by their on-screen row (so they line up with the scrollbar
+    // even when folding changes how many rows precede a line).
+    const rc = anaVirt.rowCount || total;
+    const dispRow = anaVirt.lineDisplayRow;
+    const fracOf = (i) => {
+      if (!rc) return 0;
+      const r = dispRow && i < dispRow.length ? dispRow[i] : i;
+      return ((r >= 0 ? r : i) / rc) * 100;
+    };
     if (total > 0) {
       (markers || []).forEach((m) => {
         // Hide ticks for deselected levels so the minimap matches the content.
         if (anaNav.levels[m.level] === false) return;
-        const top = (m.i / total) * 100;
+        const top = fracOf(m.i);
         const c = anaColorForLevel(m.level);
         html += `<div class="ana-ruler-tick" style="top:${top.toFixed(3)}%;background:${c}" data-line="${m.i}" title="${t('ana.line')} ${m.i + 1}"></div>`;
       });
       anaBm.lines.forEach((i) => {
-        const top = (i / total) * 100;
+        const top = fracOf(i);
         html += `<div class="ana-ruler-tick bm" style="top:${top.toFixed(3)}%" data-line="${i}" title="${t('ana.bookmark', '書籤')} ${i + 1}"></div>`;
       });
     }
@@ -1859,9 +2037,16 @@ function anaUpdateRuler() {
 function anaScrollToLine(idx, opts) {
   const scroller = document.getElementById('anaScroll');
   if (!scroller || idx == null || idx < 0) return;
+  // If the target sits inside a collapsed fold, expand it first so it has a row.
+  if (anaFoldOpenForLine(idx)) {
+    anaBuildRuler(anaNav.markers, anaVirt.total);
+  }
   const lineH = anaVirt.lineH || 19;
-  scroller.scrollTop = Math.max(0, idx * lineH - scroller.clientHeight / 2 + lineH / 2);
+  const r = anaVirt.lineDisplayRow && idx < anaVirt.lineDisplayRow.length ? anaVirt.lineDisplayRow[idx] : idx;
+  const rowIdx = r >= 0 ? r : idx;
+  scroller.scrollTop = Math.max(0, rowIdx * lineH - scroller.clientHeight / 2 + lineH / 2);
   anaVirtRender(); // render the window at the new position so the row exists
+  anaUpdateRuler();
   if (opts && opts.noFlash) return;
   const row = anaLineEl(idx);
   if (!row) return;
@@ -2145,8 +2330,21 @@ function anaFirstVisibleLine() {
   const scroller = document.getElementById('anaScroll');
   if (!scroller || !anaVirt.total) return 0;
   const lineH = anaVirt.lineH || 19;
-  const i = Math.floor(scroller.scrollTop / lineH);
-  return Math.max(0, Math.min(anaVirt.total - 1, i));
+  const rowIdx = Math.floor(scroller.scrollTop / lineH);
+  const rows = anaVirt.rows;
+  if (rows && rows.length) {
+    const clamped = Math.max(0, Math.min(rows.length - 1, rowIdx));
+    // Walk forward to the first row that maps to a real line (skip fold headers).
+    for (let r = clamped; r < rows.length; r += 1) {
+      if (rows[r].fold) {
+        if (typeof rows[r].start === 'number') return rows[r].start;
+      } else {
+        return rows[r].line;
+      }
+    }
+    return rows[clamped].fold ? rows[clamped].start : rows[clamped].line;
+  }
+  return Math.max(0, Math.min(anaVirt.total - 1, rowIdx));
 }
 
 // Mark a line as the "current" one (reference for adding/navigating bookmarks).
@@ -2276,6 +2474,8 @@ $('#btnAnaOpen').addEventListener('click', () => {
   if (zin) zin.addEventListener('click', () => anaSetFont(ana.font + 1));
   const zout = document.getElementById('btnAnaZoomOut');
   if (zout) zout.addEventListener('click', () => anaSetFont(ana.font - 1));
+  const fold = document.getElementById('btnAnaFold');
+  if (fold) fold.addEventListener('click', anaToggleFold);
 })();
 // Ctrl +/-/0 zooms the viewer font while the analysis view is active.
 document.addEventListener('keydown', (e) => {
@@ -2292,6 +2492,14 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     anaSetFont(12.5);
   }
+});
+// Alt+F opens the current log directory while the analysis view is active.
+document.addEventListener('keydown', (e) => {
+  if (!e.altKey || (e.key !== 'f' && e.key !== 'F')) return;
+  const av = document.getElementById('view-analysis');
+  if (!av || !av.classList.contains('active')) return;
+  e.preventDefault();
+  if (ana.root) window.m2log.openFolder(ana.root);
 });
 $('#anaHlSelect').addEventListener('change', async (e) => {
   ana.hl = e.target.value || 'auto';
@@ -2435,6 +2643,20 @@ if (document.getElementById('anaLevels')) {
 }
 if (document.getElementById('anaViewContent')) {
   document.getElementById('anaViewContent').addEventListener('click', (e) => {
+    // Toggle a collapsed run when its fold box is clicked.
+    const foldRow = e.target.closest('.ana-foldrow');
+    if (foldRow) {
+      const start = parseInt(foldRow.dataset.fold, 10);
+      if (!Number.isNaN(start)) {
+        const wasOpen = anaFold.open.has(start);
+        if (wasOpen) anaFold.open.delete(start);
+        else anaFold.open.add(start);
+        anaFoldApply(start);
+        // Briefly flash the just-revealed lines so it's clear which run opened.
+        if (!wasOpen) anaFoldFlashRun(start);
+      }
+      return;
+    }
     // Keep keyboard focus on the scroller (which survives the virtualized
     // window rebuilds) so PgUp/PgDn/Home/End keep working. Skip when the user
     // just made a text selection so we don't disturb it.
