@@ -24,27 +24,190 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawn, execFileSync } = require('child_process');
 
-// Resolve the VS Code launcher once. On Windows the `code` shim is `code.cmd`;
-// `where` returns its full path. Returns null when VS Code is not installed /
-// not on PATH so callers can surface a friendly message.
+// Append a line to the chat debug log (best-effort). Used for both successful
+// launches and failure paths so issues like "AI button does nothing when the
+// app is launched from Explorer" are diagnosable from
+// %TEMP%\m2log-chat-debug.log.
+function appendChatDebug(text) {
+  try {
+    fs.appendFileSync(
+      path.join(os.tmpdir(), 'm2log-chat-debug.log'),
+      `[${new Date().toISOString()}] ${text}\n\n`
+    );
+  } catch {
+    /* best-effort */
+  }
+}
+
+// Resolve the VS Code launcher once. We FIRST try PATH (fast path: works when
+// the app is started from a terminal that has VS Code's bin on PATH, e.g.
+// `npm start` from the integrated terminal). When that fails we probe the
+// well-known install locations - this is the case when the app is launched from
+// Explorer (e.g. double-clicking M2_LOG.cmd): the inherited PATH often does NOT
+// include VS Code's bin even though VS Code is installed, so `where code.cmd`
+// finds nothing and the AI button would otherwise silently do nothing. Returns
+// the launcher path/command, or null when VS Code truly cannot be found.
 let _codeCmd;
 function resolveCodeCommand() {
   if (_codeCmd !== undefined) return _codeCmd;
+
+  // 1) PATH-based lookup.
   try {
     if (process.platform === 'win32') {
       const out = execFileSync('where', ['code.cmd'], { windowsHide: true })
         .toString()
         .trim()
         .split(/\r?\n/)[0];
-      _codeCmd = out || null;
+      if (out) {
+        _codeCmd = out;
+        return _codeCmd;
+      }
     } else {
       execFileSync('which', ['code'], { windowsHide: true });
       _codeCmd = 'code';
+      return _codeCmd;
     }
   } catch {
-    _codeCmd = null;
+    /* fall through to known-location probing */
   }
+
+  // 2) Known install locations (stable + Insiders), used when PATH lookup fails.
+  const candidates = [];
+  if (process.platform === 'win32') {
+    const local = process.env.LOCALAPPDATA;
+    const pf = process.env.ProgramFiles;
+    const pf86 = process.env['ProgramFiles(x86)'];
+    if (local) {
+      candidates.push(path.join(local, 'Programs', 'Microsoft VS Code', 'bin', 'code.cmd'));
+      candidates.push(
+        path.join(local, 'Programs', 'Microsoft VS Code Insiders', 'bin', 'code-insiders.cmd')
+      );
+    }
+    if (pf) {
+      candidates.push(path.join(pf, 'Microsoft VS Code', 'bin', 'code.cmd'));
+      candidates.push(path.join(pf, 'Microsoft VS Code Insiders', 'bin', 'code-insiders.cmd'));
+    }
+    if (pf86) {
+      candidates.push(path.join(pf86, 'Microsoft VS Code', 'bin', 'code.cmd'));
+    }
+  } else if (process.platform === 'darwin') {
+    candidates.push(
+      '/usr/local/bin/code',
+      '/opt/homebrew/bin/code',
+      '/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code'
+    );
+  } else {
+    candidates.push('/usr/bin/code', '/usr/local/bin/code', '/snap/bin/code');
+  }
+
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) {
+        _codeCmd = candidate;
+        return _codeCmd;
+      }
+    } catch {
+      /* ignore and try the next candidate */
+    }
+  }
+
+  _codeCmd = null;
   return _codeCmd;
+}
+
+// ---- Windows UAC integrity detection ---------------------------------------
+// A normal-integrity process cannot deliver a `code chat` request to an ELEVATED
+// VS Code (Windows blocks access to the higher-integrity IPC pipe), so the AI
+// button silently does nothing. We detect that exact situation and surface an
+// actionable message instead of failing quietly.
+
+// Whether THIS process (M2_LOG) is elevated (High integrity). Cached - a
+// process's integrity level never changes during its lifetime. Locale-safe: we
+// match the High Mandatory Level SID, not a translated label.
+let _selfElevated;
+function isSelfElevated() {
+  if (_selfElevated !== undefined) return _selfElevated;
+  if (process.platform !== 'win32') {
+    _selfElevated = true;
+    return _selfElevated;
+  }
+  try {
+    const out = execFileSync('whoami', ['/groups'], { windowsHide: true }).toString();
+    _selfElevated = /S-1-16-12288/.test(out); // High Mandatory Level SID
+  } catch (e) {
+    appendChatDebug('isSelfElevated: whoami failed: ' + e.message);
+    _selfElevated = true; // can't tell -> don't block the user
+  }
+  return _selfElevated;
+}
+
+// Whether a running VS Code (Code.exe) is elevated. Detected by trying to read
+// each process's module path: a normal-integrity caller is denied access to an
+// elevated process's path. Only meaningful when WE are not elevated. Result is
+// cached briefly so rapid AI clicks don't each spawn PowerShell.
+let _vscodeElevatedCache = { at: 0, value: false };
+function isRunningVSCodeElevated() {
+  if (process.platform !== 'win32') return false;
+  const now = Date.now();
+  if (now - _vscodeElevatedCache.at < 15000) return _vscodeElevatedCache.value;
+  let value = false;
+  try {
+    // Definitive check: read each Code.exe's TOKEN integrity level via Win32.
+    // A normal-integrity caller is DENIED access to an elevated process's token
+    // (rid -1), while an elevated process reports the High RID (12288). Reading
+    // the image .Path is NOT reliable here - it is allowed across integrity
+    // levels for the same user, so it never throws and misses the mismatch.
+    const psScript = [
+      "$ErrorActionPreference='SilentlyContinue'",
+      "$ProgressPreference='SilentlyContinue'",
+      "Add-Type -TypeDefinition @'",
+      'using System;',
+      'using System.Runtime.InteropServices;',
+      'public static class M2Integ {',
+      '  [DllImport("kernel32.dll", SetLastError=true)] static extern IntPtr OpenProcess(int a, bool i, int pid);',
+      '  [DllImport("kernel32.dll", SetLastError=true)] static extern bool CloseHandle(IntPtr h);',
+      '  [DllImport("advapi32.dll", SetLastError=true)] static extern bool OpenProcessToken(IntPtr p, int a, out IntPtr t);',
+      '  [DllImport("advapi32.dll", SetLastError=true)] static extern bool GetTokenInformation(IntPtr t, int c, IntPtr info, int len, out int ret);',
+      '  public static int Level(int pid) {',
+      '    IntPtr p = OpenProcess(0x1000, false, pid);',
+      '    if (p == IntPtr.Zero) return -2;',
+      '    IntPtr tok;',
+      '    if (!OpenProcessToken(p, 0x0008, out tok)) { CloseHandle(p); return -1; }',
+      '    int len = 0; GetTokenInformation(tok, 25, IntPtr.Zero, 0, out len);',
+      '    int rid = -3;',
+      '    if (len > 0) {',
+      '      IntPtr buf = Marshal.AllocHGlobal(len);',
+      '      if (GetTokenInformation(tok, 25, buf, len, out len)) {',
+      '        IntPtr sid = Marshal.ReadIntPtr(buf);',
+      '        byte count = Marshal.ReadByte(sid, 1);',
+      '        rid = Marshal.ReadInt32(sid, 8 + (count - 1) * 4);',
+      '      }',
+      '      Marshal.FreeHGlobal(buf);',
+      '    }',
+      '    CloseHandle(tok); CloseHandle(p);',
+      '    return rid;',
+      '  }',
+      '}',
+      "'@ -ErrorAction SilentlyContinue",
+      '$ps = Get-Process -Name Code -ErrorAction SilentlyContinue',
+      "if (-not $ps) { Write-Output 'NORMAL'; exit 0 }",
+      '$elevated = $false',
+      'foreach ($p in $ps) { $lvl = [M2Integ]::Level($p.Id); if ($lvl -eq -1 -or $lvl -ge 12288) { $elevated = $true } }',
+      "Write-Output ($(if ($elevated) { 'ELEVATED' } else { 'NORMAL' }))",
+    ].join('\n');
+    const encoded = Buffer.from(psScript, 'utf16le').toString('base64');
+    const out = execFileSync(
+      'powershell',
+      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
+      { windowsHide: true, timeout: 8000 }
+    ).toString();
+    value = /ELEVATED/.test(out);
+  } catch (e) {
+    appendChatDebug('isRunningVSCodeElevated: failed: ' + e.message);
+    value = false; // can't tell -> don't block
+  }
+  _vscodeElevatedCache = { at: now, value };
+  return value;
 }
 
 // Remove our own stale chat-context temp files/folders. `code chat --add-file`
@@ -97,17 +260,21 @@ function buildLogChatContext(name, text) {
   return header + String(text == null ? '' : text);
 }
 
-// Open a VS Code chat session preloaded with the LOG as an attached file, with
-// the input box LEFT EMPTY so nothing is auto-submitted - the user types their
-// own prompt and presses Enter. We REUSE the running VS Code window (`-r`)
-// instead of forcing a new empty one (`-n`): a brand-new window is not ready in
-// time, so the chat request and `--add-file` attachment get dropped. We pass NO
-// prompt (so the AI does not start on its own) plus `--maximize`, which is what
-// actually forces the chat view open for an empty query - without it a
-// prompt-less `code chat` is a silent no-op. Every command-line token is either
-// trusted/whitelisted or our crypto-random temp path, so there is no
-// shell-injection surface despite shell:true (needed for the code.cmd shim on
-// Windows). The LOG text only ever lives in the temp file.
+// Open a VS Code chat session preloaded with the LOG as an attached file and a
+// fixed analysis prompt. The `code chat` CLI is prompt-driven ("Pass in a
+// prompt to run in a chat session") - WITHOUT a prompt it does nothing: it
+// exits 0 and opens no view, so `--maximize` on its own is a silent no-op (this
+// is why the AI button appeared to do nothing). We REUSE the running VS Code
+// window (`-r`) instead of forcing a new empty one (`-n`): a brand-new window
+// is not ready in time, so the chat request and `--add-file` attachment get
+// dropped. `--mode ask` keeps the session read-only (no edits / no commands).
+// The prompt is a FIXED, trusted constant - no LOG text or file name is ever
+// interpolated - so there is no shell-injection surface despite shell:true
+// (needed for the code.cmd shim on Windows). The LOG text only ever lives in
+// the temp file.
+const LOG_ANALYSIS_PROMPT =
+  'Analyze the attached LOG file: identify errors, warnings, abnormal timestamps and ordering, and infer the most likely root cause.';
+
 async function openInVSCodeChat(payload) {
   const { name, text, dir } = payload || {};
   if (text == null || String(text) === '') {
@@ -115,7 +282,25 @@ async function openInVSCodeChat(payload) {
   }
 
   const codeCmd = resolveCodeCommand();
-  if (!codeCmd) return { ok: false, error: 'VSCODE_NOT_FOUND' };
+  if (!codeCmd) {
+    appendChatDebug(
+      'VSCODE_NOT_FOUND - code.cmd not on PATH and not at any known install ' +
+        `location.\nPATH=${process.env.PATH || ''}`
+    );
+    return { ok: false, error: 'VSCODE_NOT_FOUND' };
+  }
+
+  // Windows UAC: a normal-integrity M2_LOG cannot reach an ELEVATED VS Code, so
+  // the chat request would be silently dropped. Detect that mismatch and tell the
+  // user to launch M2_LOG as administrator (e.g. via M2_LOG_Admin.cmd).
+  const selfElevated = isSelfElevated();
+  const vscodeElevated = selfElevated ? false : isRunningVSCodeElevated();
+  if (!selfElevated && vscodeElevated) {
+    appendChatDebug(
+      'INTEGRITY_MISMATCH - M2_LOG is normal integrity but a running VS Code is elevated.'
+    );
+    return { ok: false, error: 'INTEGRITY_MISMATCH' };
+  }
 
   sweepStaleChatTemps();
 
@@ -144,11 +329,12 @@ async function openInVSCodeChat(payload) {
       resolve(res);
     };
 
-    // No prompt = the AI does not start; `--maximize` forces the chat view open
-    // for the empty query and the file lands as an attachment. Only the trusted
-    // resolved code path and our temp path are interpolated - no user content -
-    // so there is no injection surface despite shell:true.
-    const cmdLine = `"${codeCmd}" chat -r --add-file "${tmpFile}" --maximize`;
+    // `code chat` needs a prompt to actually open a session, so we pass the
+    // fixed LOG_ANALYSIS_PROMPT (and `--mode ask` to keep it read-only). Only
+    // the trusted code path, our temp path, and that fixed prompt are
+    // interpolated - no user/LOG content - so there is no injection surface
+    // despite shell:true.
+    const cmdLine = `"${codeCmd}" chat -r --mode ask --add-file "${tmpFile}" --maximize "${LOG_ANALYSIS_PROMPT}"`;
     try {
       child = spawn(cmdLine, { cwd, windowsHide: true, shell: true });
     } catch (e) {
@@ -159,15 +345,9 @@ async function openInVSCodeChat(payload) {
     if (child.stderr) child.stderr.on('data', (d) => (stderr += d.toString()));
     child.on('error', (e) => done({ ok: false, error: 'Failed to launch VS Code: ' + e.message }));
     child.on('close', (code) => {
-      try {
-        fs.appendFileSync(
-          path.join(os.tmpdir(), 'm2log-chat-debug.log'),
-          `[${new Date().toISOString()}] exit=${code}\ncmd=${cmdLine}\n` +
-            `stdout=${stdout.trim()}\nstderr=${stderr.trim()}\n\n`
-        );
-      } catch {
-        /* best-effort */
-      }
+      appendChatDebug(
+        `exit=${code}\ncmd=${cmdLine}\nstdout=${stdout.trim()}\nstderr=${stderr.trim()}`
+      );
       if (code === 0 || code == null) done({ ok: true });
       else done({ ok: false, error: (stderr || stdout || `code chat exited ${code}`).trim() });
     });

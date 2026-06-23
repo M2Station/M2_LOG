@@ -2291,6 +2291,14 @@ $('#btnAnaAI').addEventListener('click', async () => {
     const res = await window.m2log.openInVSCodeChat({ name: ana.name, text: ana.text, dir: ana.root });
     if (res && res.ok) {
       toast(t('toast.aiOk', '已在 VS Code AI 對話帶入此 LOG'), 'success');
+    } else if (res && res.error === 'INTEGRITY_MISMATCH') {
+      toast(
+        t(
+          'toast.aiAdminMismatch',
+          'VS Code 以系統管理員執行，但 M2_LOG 不是。請用 M2_LOG_Admin.cmd 以系統管理員身分啟動 M2_LOG，AI 才能連上 VS Code。'
+        ),
+        'error'
+      );
     } else if (res && res.error === 'VSCODE_NOT_FOUND') {
       toast(t('toast.aiNoVSCode', '找不到 VS Code，請先安裝並確認 code 已加入 PATH。'), 'error');
     } else if (res && res.error === 'NO_LOG') {

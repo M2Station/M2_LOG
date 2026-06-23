@@ -65,6 +65,12 @@ npm install
 npm start
 ```
 
+> **AI button & VS Code elevation (Windows):** the **AI** action reaches a running VS Code
+> through its CLI, which Windows only permits between processes at the **same UAC level**.
+> If your VS Code runs **as Administrator**, start M2_LOG with **`M2_LOG_Admin.cmd`** (it
+> self-elevates via UAC) so the AI button can connect; otherwise the AI button shows a hint
+> and does nothing. If VS Code runs normally, plain **`M2_LOG.cmd`** works.
+
 ---
 
 ## 📂 Output layout example
@@ -117,6 +123,7 @@ test/        selftest.test.js (static guards)
 scripts/     make-icon.mjs (dependency-free icon generator)
 .github/     CI workflows (quality / build / release / selftest / codeql) + dependabot
 M2_LOG.cmd   launcher (auto-installs Node + deps, then npm start)
+M2_LOG_Admin.cmd  same launcher, self-elevated (for an Administrator VS Code; needed by the AI button)
 package.json electron + electron-builder
 ```
 
@@ -194,6 +201,11 @@ npm install
 npm start
 ```
 
+> **AI 按鈕與 VS Code 權限（Windows）：** 「AI」功能透過 VS Code 的 CLI 連到執行中的 VS Code，
+> 而 Windows 只允許**相同 UAC 權限等級**的程序互通。若你的 VS Code 以**系統管理員**執行，請改用
+> **`M2_LOG_Admin.cmd`**（會經由 UAC 自動提權）啟動 M2_LOG，AI 按鈕才能連上；否則 AI 按鈕會顯示
+> 提示而不會動作。若 VS Code 以一般權限執行，直接用 **`M2_LOG.cmd`** 即可。
+
 ---
 
 ## 📂 輸出結構範例
@@ -245,6 +257,7 @@ test/        selftest.test.js（靜態檢查）
 scripts/     make-icon.mjs（零相依圖示產生器）
 .github/     CI 工作流程（quality / build / release / selftest / codeql）＋ dependabot
 M2_LOG.cmd   啟動器（自動裝 Node 與相依套件，然後 npm start）
+M2_LOG_Admin.cmd  同上但自動提權（VS Code 以系統管理員執行時，AI 按鈕需要）
 package.json electron + electron-builder
 ```
 
