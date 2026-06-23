@@ -1901,7 +1901,7 @@ function anaLevelLabel(level) {
   if (level === 'version') return t('ana.version', '版號');
   if (level === 'boot') return t('ana.boot', '開機點');
   if (level === 'membucket') return t('ana.membucket', '記憶體配置');
-  if (level === 'powerseq') return t('ana.powerseq', 'PowerSequence');
+  if (level === 'socss') return t('ana.socss', 'SoC子系統');
   if (level === 'uefissh') return t('ana.uefissh', 'UEFI_SSH');
   if (level === 'pd') return t('ana.pd', 'PD');
   if (anaIsMarkLevel(level)) return anaMarkLabel(level);

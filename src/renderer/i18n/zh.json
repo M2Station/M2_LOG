@@ -102,7 +102,7 @@
   "ana.version": "版號",
   "ana.boot": "開機點",
   "ana.membucket": "記憶體配置",
-  "ana.powerseq": "電源序列",
+  "ana.socss": "SoC子系統",
   "ana.uefissh": "UEFI_SSH",
   "ana.pd": "PD",
   "ana.level.toggle": "選取：是否納入計數與上下導覽",

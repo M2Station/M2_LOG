@@ -102,7 +102,7 @@
   "ana.version": "Version",
   "ana.boot": "Boot Point",
   "ana.membucket": "Memory Bucket",
-  "ana.powerseq": "PowerSequence",
+  "ana.socss": "SocSubsystem",
   "ana.uefissh": "UEFI_SSH",
   "ana.pd": "PD",
   "ana.level.toggle": "Select: include in count / up-down navigation",
