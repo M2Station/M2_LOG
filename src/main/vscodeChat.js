@@ -84,22 +84,24 @@ function buildLogChatContext(name, text) {
   return header + String(text == null ? '' : text);
 }
 
-// Constant kickoff prompt submitted to the new chat session. The VS Code `code
-// chat` CLI only actually OPENS a chat session when a prompt is supplied - with
-// no prompt it just opens an (empty) window and nothing happens. This string is
+// Constant kickoff prompt submitted to the chat session. The VS Code `code chat`
+// CLI only actually OPENS a chat session when a prompt is supplied - with no
+// prompt it just opens a window and nothing happens. Kept ASCII-only: the
+// command is launched through cmd.exe (shell:true, needed for the code.cmd shim)
+// which mangles non-ASCII argv into '?' under the OEM code page. This string is
 // a fixed, whitelisted constant containing NO log or user content, so it adds no
-// shell-injection surface. It engages the agent immediately; the user can keep
-// the conversation going afterwards.
+// shell-injection surface.
 const DEFAULT_CHAT_PROMPT =
-  '請分析這個附加的 LOG 檔案：找出錯誤、警告、異常的時間點與順序，並推斷可能的根因。';
+  'Analyze the attached LOG file: identify errors, warnings, abnormal timestamps and ordering, and infer the likely root cause.';
 
-// Open a NEW VS Code chat session preloaded with the LOG as an attached file and
-// kick it off with a constant analysis prompt. `code chat -n -m agent
-// --add-file <file> "<prompt>"` opens a fresh agent-mode session with the file
-// attached and immediately starts the AI. Every command-line token is
-// constant/whitelisted or our crypto-random temp path, so there is no
-// shell-injection surface despite shell:true (needed to launch the code.cmd
-// batch shim on Windows). The LOG text only ever lives inside the temp file.
+// Open a VS Code chat session preloaded with the LOG as an attached file and
+// kick it off with a constant analysis prompt. We REUSE the running VS Code
+// window (`-r`) instead of forcing a new empty one (`-n`): a brand-new window is
+// not ready in time, so the chat request and `--add-file` attachment get dropped
+// - reuse is reliable and still starts a fresh chat conversation. Every
+// command-line token is constant/whitelisted or our crypto-random temp path, so
+// there is no shell-injection surface despite shell:true (needed to launch the
+// code.cmd batch shim on Windows). The LOG text only ever lives in the temp file.
 async function openInVSCodeChat(payload) {
   const { name, text, dir } = payload || {};
   if (text == null || String(text) === '') {
@@ -126,9 +128,10 @@ async function openInVSCodeChat(payload) {
     try {
       // Constant command string: only the trusted resolved code path and our
       // generated temp path are interpolated - no user content. The trailing
-      // prompt is a fixed constant, required for the chat session to actually
-      // open and start the AI.
-      const cmdLine = `"${codeCmd}" chat -n -m agent --add-file "${tmpFile}" "${DEFAULT_CHAT_PROMPT}"`;
+      // prompt is a fixed ASCII constant, required for the chat session to
+      // actually open and start the AI. `-r` reuses the running window so the
+      // attachment lands reliably.
+      const cmdLine = `"${codeCmd}" chat -r -m agent --add-file "${tmpFile}" "${DEFAULT_CHAT_PROMPT}"`;
       child = spawn(cmdLine, { cwd, windowsHide: true, shell: true });
     } catch (e) {
       resolve({ ok: false, error: 'Failed to launch VS Code: ' + e.message });
