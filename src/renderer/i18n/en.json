@@ -126,6 +126,7 @@
   "toast.aiFail": "Failed to open VS Code: ",
   "toast.aiNoVSCode": "VS Code not found. Install it and make sure 'code' is on your PATH.",
   "toast.aiNoLog": "Open a LOG first, then start an AI chat",
+  "toast.aiAdminMismatch": "VS Code is running as Administrator but M2_LOG is not. Launch M2_LOG as administrator (use M2_LOG_Admin.cmd) so the AI button can reach VS Code.",
   "settings.title": "Settings",
   "settings.folderLen": "Folder name length",
   "settings.folderLen.opt": "(1-40)",
