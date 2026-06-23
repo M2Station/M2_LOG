@@ -1694,13 +1694,15 @@ function anaRenderContent(text, rules) {
   rules = { compiled: baseCompiled.concat(anaMarkCompiled()) };
   const lines = text === ana.text ? anaGetLines() : String(text).split(/\r\n|\r|\n/);
   const markers = [];
-  // Render in chunks so opening a large log does not freeze the UI thread:
-  // the first chunk paints almost immediately, the rest stream in across
-  // animation frames. A token cancels a half-finished render if another file
-  // (or a re-highlight) starts before this one completes.
+  // Paint a small first slice synchronously (instant first paint), then insert
+  // ALL remaining lines in a SINGLE pass on the next frame. Many small rAF
+  // chunks are ~10x slower here: each chunk forces a fresh style/layout pass
+  // over the growing, content-visibility'd DOM, so the cost compounds (measured
+  // ~3.5s chunked vs ~0.36s single-insert for ~82k lines). A token cancels a
+  // half-finished render if another file (or a re-highlight) starts first.
   const token = (anaRenderToken += 1);
   const total = lines.length;
-  const CHUNK = 2000;
+  const FIRST_PAINT = 1500;
   el.innerHTML = '';
   const scroller = document.getElementById('anaScroll');
   if (scroller) scroller.scrollTop = 0;
@@ -1725,9 +1727,9 @@ function anaRenderContent(text, rules) {
   }
 
   let i = 0;
-  function renderChunk() {
+  function renderUpTo(limit) {
     if (token !== anaRenderToken) return false; // superseded by a newer render
-    const end = Math.min(i + CHUNK, total);
+    const end = Math.min(limit, total);
     let html = '';
     for (; i < end; i += 1) {
       const res = anaHighlightLine(lines[i], rules);
@@ -1739,17 +1741,17 @@ function anaRenderContent(text, rules) {
     return i < total;
   }
 
-  function pump() {
-    if (renderChunk()) {
-      requestAnimationFrame(pump);
-    } else if (token === anaRenderToken) {
-      finalize();
-    }
+  // First slice paints almost immediately; the remainder is inserted in ONE
+  // pass on the next frame (avoids the many-small-chunk layout penalty above).
+  if (renderUpTo(FIRST_PAINT)) {
+    requestAnimationFrame(() => {
+      if (token !== anaRenderToken) return;
+      renderUpTo(total);
+      if (token === anaRenderToken) finalize();
+    });
+  } else if (token === anaRenderToken) {
+    finalize();
   }
-
-  // First chunk runs synchronously so small files behave exactly as before and
-  // large files show content without a blank flash; remainder streams in.
-  pump();
 }
 
 
