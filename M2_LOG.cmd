@@ -93,7 +93,7 @@ if not errorlevel 1 (
 echo [INFO] Node.js not found. Trying automatic install via winget ...
 where winget >nul 2>nul
 if errorlevel 1 (
-    echo [ERROR] winget (App Installer) is not available; cannot auto-install Node.js.
+    echo [ERROR] winget ^(App Installer^) is not available; cannot auto-install Node.js.
     exit /b 1
 )
 
