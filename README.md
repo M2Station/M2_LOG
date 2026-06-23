@@ -70,6 +70,9 @@ npm start
 > If your VS Code runs **as Administrator**, start M2_LOG with **`M2_LOG_Admin.cmd`** (it
 > self-elevates via UAC) so the AI button can connect; otherwise the AI button shows a hint
 > and does nothing. If VS Code runs normally, plain **`M2_LOG.cmd`** works.
+> **Installed build:** the `.cmd` launchers are source-only — if you use the installer, run
+> the **M2_LOG** shortcut **as Administrator** (right-click → *Run as administrator*) to match
+> an elevated VS Code.
 
 ---
 
@@ -205,6 +208,8 @@ npm start
 > 而 Windows 只允許**相同 UAC 權限等級**的程序互通。若你的 VS Code 以**系統管理員**執行，請改用
 > **`M2_LOG_Admin.cmd`**（會經由 UAC 自動提權）啟動 M2_LOG，AI 按鈕才能連上；否則 AI 按鈕會顯示
 > 提示而不會動作。若 VS Code 以一般權限執行，直接用 **`M2_LOG.cmd`** 即可。
+> **安裝版：** `.cmd` 啟動器只用於原始碼；若使用安裝檔，請對 **M2_LOG** 捷徑按右鍵
+> →「以系統管理員身分執行」，以配合系統管理員權限的 VS Code。
 
 ---
 

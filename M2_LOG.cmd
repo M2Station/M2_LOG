@@ -26,18 +26,49 @@ if not exist "node_modules" (
     )
 )
 
-echo [INFO] Starting M2 LOG ...
+REM Verify the Electron binary actually downloaded. Its postinstall download can
+REM be skipped or blocked (offline, proxy, or npm "ignore-scripts"), leaving a
+REM half-installed node_modules\electron that crashes at launch with
+REM "Electron failed to install correctly". Repair it before starting.
 set "ELECTRON=node_modules\electron\dist\electron.exe"
+if not exist "%ELECTRON%" call :repair_electron
+
+echo [INFO] Starting M2 LOG ...
 if exist "%ELECTRON%" (
     REM Launch the Electron GUI exe directly and detached, so the launcher
     REM console window closes instead of lingering for the app's lifetime.
     start "" "%ELECTRON%" "%~dp0."
 ) else (
-    REM Fallback: electron binary not found yet (e.g. install still settling)
-    REM -- run via npm, which keeps a console window open.
-    call npm start
+    echo [ERROR] Electron is still not installed correctly.
+    echo         Fix it manually from this folder, then run again:
+    echo             rmdir /s /q node_modules\electron
+    echo             npm install
+    echo             node node_modules\electron\install.js
+    echo.
+    pause
+    exit /b 1
 )
 endlocal
+exit /b 0
+
+REM ============================================================
+REM  Subroutine: repair a missing / half-installed Electron binary
+REM ============================================================
+:repair_electron
+echo [WARN] Electron binary not found - attempting automatic repair ...
+REM Run Electron's own downloader directly first. This also works when npm
+REM lifecycle scripts are disabled (npm config ignore-scripts=true), which is
+REM the most common reason the binary never downloaded.
+if exist "node_modules\electron\install.js" (
+    echo [INFO] Downloading the Electron binary ...
+    node "node_modules\electron\install.js"
+)
+if exist "%ELECTRON%" exit /b 0
+REM Still missing - clean reinstall, then download again as a safety net.
+echo [INFO] Reinstalling dependencies ...
+if exist "node_modules\electron" rmdir /s /q "node_modules\electron"
+call npm install
+if not exist "%ELECTRON%" if exist "node_modules\electron\install.js" node "node_modules\electron\install.js"
 exit /b 0
 
 REM ============================================================
