@@ -1822,6 +1822,19 @@ function anaFoldFlashRun(start) {
   }, 1300);
 }
 
+// Flash the collapsed fold bar of a just-folded run, so it's clear where the
+// hidden lines went.
+function anaFoldFlashBar(start) {
+  const el = document.getElementById('anaViewContent');
+  if (!el) return;
+  const bar = el.querySelector('.ana-foldrow[data-fold="' + start + '"]');
+  if (!bar) return;
+  bar.classList.remove('foldflash');
+  void bar.offsetWidth; // restart the animation if the class lingered
+  bar.classList.add('foldflash');
+  window.setTimeout(() => bar.classList.remove('foldflash'), 1300);
+}
+
 // Toolbar toggle: fold/unfold the non-highlighted runs.
 function anaToggleFold() {
   ana.fold = !ana.fold;
@@ -2680,8 +2693,10 @@ if (document.getElementById('anaViewContent')) {
         if (wasOpen) anaFold.open.delete(start);
         else anaFold.open.add(start);
         anaFoldApply(start);
-        // Briefly flash the just-revealed lines so it's clear which run opened.
-        if (!wasOpen) anaFoldFlashRun(start);
+        // Flash the affected area: the revealed lines when expanding, or the new
+        // fold bar when collapsing.
+        if (wasOpen) anaFoldFlashBar(start);
+        else anaFoldFlashRun(start);
       }
       return;
     }

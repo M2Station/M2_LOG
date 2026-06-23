@@ -1427,6 +1427,9 @@ body.ana-ruler-dragging .ana-ruler-view {
 .ana-line.foldflash {
   animation: anaFoldFlash 1.2s ease-in-out;
 }
+.ana-foldrow.foldflash {
+  animation: anaFoldFlash 1.2s ease-in-out;
+}
 
 .hl-error {
   color: #ff6b81;
