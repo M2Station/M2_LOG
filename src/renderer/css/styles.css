@@ -1346,6 +1346,91 @@ body.ana-ruler-dragging .ana-ruler-view {
   border-radius: 5px;
 }
 
+/* Fold bar: a full-width separator that stands in for a run of collapsed
+   (non-highlighted) lines, or sits above/below an expanded run. Its height is
+   set inline to match the virtualized line height exactly. */
+.ana-foldrow {
+  display: flex;
+  align-items: center;
+  min-width: 100%;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.ana-foldrow.foot {
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.ana-foldrow:hover {
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+}
+.ana-fold-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 1.35em;
+  margin-left: 14px;
+  padding: 0 8px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  font-size: 0.82em;
+  font-weight: 700;
+  line-height: 1;
+}
+.ana-fold-ic::before {
+  content: '+';
+  font-weight: 800;
+}
+.ana-foldrow.open .ana-fold-ic::before {
+  content: '\2212'; /* minus sign */
+}
+.ana-fold-n {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.95;
+}
+.ana-fold-jump {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 8px;
+  padding: 1px 4px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+}
+.ana-fold-jump:hover {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+/* Toolbar fold toggle active state (mirrors the other ghost toggles). */
+#btnAnaFold.on {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+/* Pulse a just-expanded run's background once, slowly, to point it out. */
+@keyframes anaFoldFlash {
+  0% {
+    background: transparent;
+  }
+  50% {
+    background: color-mix(in srgb, var(--accent) 34%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
+}
+.ana-line.foldflash {
+  animation: anaFoldFlash 1.2s ease-in-out;
+}
+.ana-foldrow.foldflash {
+  animation: anaFoldFlash 1.2s ease-in-out;
+}
+
 .hl-error {
   color: #ff6b81;
   font-weight: 700;
