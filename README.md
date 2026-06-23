@@ -112,7 +112,7 @@ src/
   main/      Electron main process (main / ipc / utils / paths / logwriter / vscodeChat)
   preload/   contextBridge bridge (window.m2log)
   renderer/  index.html, css/styles.css, js/{app,themes}.js, i18n/{en,zh}.json
-highlight/   UEFI.json / SAM.json highlight rules
+highlight/   INTEL_UEFI.json / RUST_SAM.json highlight rules
 test/        selftest.test.js (static guards)
 scripts/     make-icon.mjs (dependency-free icon generator)
 .github/     CI workflows (quality / build / release / selftest / codeql) + dependabot
@@ -240,7 +240,7 @@ src/
   main/      Electron 主行程（main / ipc / utils / paths / logwriter / vscodeChat）
   preload/   contextBridge 橋接（window.m2log）
   renderer/  index.html、css/styles.css、js/{app,themes}.js、i18n/{en,zh}.json
-highlight/   UEFI.json / SAM.json 高亮規則
+highlight/   INTEL_UEFI.json / RUST_SAM.json 高亮規則
 test/        selftest.test.js（靜態檢查）
 scripts/     make-icon.mjs（零相依圖示產生器）
 .github/     CI 工作流程（quality / build / release / selftest / codeql）＋ dependabot

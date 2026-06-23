@@ -50,8 +50,8 @@ jobs:
           $required = @(
             "M2_LOG.exe",
             "resources/app.asar",
-            "highlight/SAM.json",
-            "highlight/UEFI.json"
+            "highlight/RUST_SAM.json",
+            "highlight/INTEL_UEFI.json"
           )
           $fail = $false
           foreach ($r in $required) {
