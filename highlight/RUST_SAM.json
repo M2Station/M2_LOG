@@ -12,9 +12,9 @@
       "pattern": "\\b(?:warn(?:ing)?|timeout|timed?\\s*out|retry|retries|retrying|busy|skip(?:ped)?)\\b"
     },
     {
-      "name": "PowerSequence",
-      "level": "powerseq",
-      "pattern": "-{3,}(?:Start\\s+[A-Za-z0-9]+\\s*->\\s*[A-Za-z0-9]+|Press\\s+Power\\s+Button)-{3,}"
+      "name": "SocSubsystem",
+      "level": "socss",
+      "pattern": "-{3,}(?:Start\\s+[A-Za-z0-9]+\\s*->\\s*[A-Za-z0-9]+|Press\\s+Power\\s+Button)-{3,}|\\b(?:powersequence|boot\\s+failure|reset\\s+reason)\\b"
     },
     {
       "name": "UEFI_SSH",
