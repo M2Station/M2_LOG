@@ -981,7 +981,6 @@ const ANA_FOLDER_SVG =
 const ANA_FILE_SVG =
   '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
 const ANA_HL_KEY = 'm2log_ana_hl';
-const ANA_WRAP_KEY = 'm2log_ana_wrap';
 const ANA_FONT_KEY = 'm2log_ana_font';
 const ANA_ROOT_KEY = 'm2log_ana_root';
 const ANA_FILE_KEY = 'm2log_ana_file';
@@ -994,7 +993,6 @@ const ana = {
   text: null,
   name: '',
   lines: null,
-  wrap: localStorage.getItem(ANA_WRAP_KEY) !== '0',
   font: clampAnaFont(parseFloat(localStorage.getItem(ANA_FONT_KEY))),
 };
 const anaNav = { markers: [], targets: [], pos: -1, line: -1, levels: {} };
@@ -1051,23 +1049,18 @@ async function anaEnsureInit() {
 function anaApplyViewPrefs() {
   const el = document.getElementById('anaViewContent');
   if (el) {
-    el.classList.toggle('nowrap', !ana.wrap);
+    // Virtualized rendering requires a fixed line height, so the viewer is
+    // always nowrap (long lines scroll horizontally).
+    el.classList.add('nowrap');
     el.style.fontSize = ana.font + 'px';
   }
-  const wrapBtn = document.getElementById('btnAnaWrap');
-  if (wrapBtn) wrapBtn.classList.toggle('on', ana.wrap);
-}
-
-function anaToggleWrap() {
-  ana.wrap = !ana.wrap;
-  localStorage.setItem(ANA_WRAP_KEY, ana.wrap ? '1' : '0');
-  anaApplyViewPrefs();
 }
 
 function anaSetFont(px) {
   ana.font = clampAnaFont(px);
   localStorage.setItem(ANA_FONT_KEY, String(ana.font));
   anaApplyViewPrefs();
+  anaVirtRefresh(); // font size changed -> line height changed -> re-measure + re-render
 }
 
 async function anaRenderTree() {
@@ -1543,6 +1536,8 @@ async function anaViewFile(entry, row) {
   anaInvalidateRulesCache();
   const rules = await anaResolveRules(entry.name);
   anaRenderContent(text, rules);
+  const sc = document.getElementById('anaScroll');
+  if (sc) sc.focus({ preventScroll: true });
   $('#anaViewMeta').textContent = formatBytes(res.size) + (res.truncated ? ' · ' + t('ana.truncated') : '');
 }
 
@@ -1681,9 +1676,94 @@ function anaHighlightLine(line, rules) {
   return { html: out, level: maxLevel, tint: tintLevel };
 }
 
-// Monotonic token that identifies the in-flight chunked render; bumping it
-// cancels any outstanding animation-frame work from a previous file/highlight.
-let anaRenderToken = 0;
+// ---- Virtualized rendering ------------------------------------------------
+// Only the lines near the viewport are ever in the DOM. A huge log (80k+ lines)
+// otherwise creates ~250k nodes: slow to open AND laggy to scroll/select (the
+// browser must lay out everything a selection spans). Lines are fixed-height
+// (nowrap; long lines scroll horizontally), so the total scroll height is
+// total*lineH and the visible window is derived from scrollTop. Two spacer divs
+// hold the off-screen height above and below the rendered window.
+const anaVirt = { lines: null, rules: null, total: 0, lineH: 19, start: -1, end: -1, scheduled: false };
+
+// Measure one rendered line's height (depends on the current font size).
+function anaMeasureLineH(el) {
+  const probe = document.createElement('div');
+  probe.className = 'ana-line';
+  probe.style.visibility = 'hidden';
+  probe.innerHTML = '<span class="ana-ln">1</span><span class="ana-lc">M</span>';
+  el.appendChild(probe);
+  const h = probe.getBoundingClientRect().height;
+  el.removeChild(probe);
+  return h || 19;
+}
+
+// The DOM element for line `idx`, or null if it is outside the rendered window.
+// Children layout: [topSpacer, ...windowLines, bottomSpacer].
+function anaLineEl(idx) {
+  if (idx == null || idx < anaVirt.start || idx >= anaVirt.end) return null;
+  const el = document.getElementById('anaViewContent');
+  return el ? el.children[1 + (idx - anaVirt.start)] || null : null;
+}
+
+// Render the window of lines visible at the current scroll position.
+function anaVirtRender() {
+  anaVirt.scheduled = false;
+  const el = document.getElementById('anaViewContent');
+  const scroller = document.getElementById('anaScroll');
+  if (!el || !scroller || !anaVirt.lines) return;
+  const lineH = anaVirt.lineH || 19;
+  const total = anaVirt.total;
+  const buffer = 40;
+  const firstVis = Math.floor(scroller.scrollTop / lineH);
+  const lastVis = Math.ceil((scroller.scrollTop + scroller.clientHeight) / lineH);
+  // Keep the current window if it still covers the viewport with margin to
+  // spare. Avoids rebuilding the DOM on every small scroll (which would also
+  // clobber an in-progress text selection).
+  if (
+    anaVirt.start >= 0 &&
+    anaVirt.start <= Math.max(0, firstVis - 8) &&
+    anaVirt.end >= Math.min(total, lastVis + 8)
+  ) {
+    return;
+  }
+  let start = firstVis - buffer;
+  if (start < 0) start = 0;
+  let end = lastVis + buffer;
+  if (end > total) end = total;
+  if (start === anaVirt.start && end === anaVirt.end) return;
+  anaVirt.start = start;
+  anaVirt.end = end;
+
+  const lines = anaVirt.lines;
+  const rules = anaVirt.rules;
+  const cur = anaBm.current;
+  const bm = anaBm.lines;
+  let html = '<div class="ana-vpad" style="height:' + start * lineH + 'px"></div>';
+  for (let i = start; i < end; i += 1) {
+    const res = anaHighlightLine(lines[i], rules);
+    const lvl = res.tint ? ' lvl-' + res.tint : '';
+    const b = bm.has(i) ? ' bookmarked' : '';
+    const c = i === cur ? ' current' : '';
+    html +=
+      '<div class="ana-line' + lvl + b + c + '" data-i="' + i + '">' +
+      '<span class="ana-ln">' + (i + 1) + '</span><span class="ana-lc">' + res.html + '</span></div>';
+  }
+  html += '<div class="ana-vpad" style="height:' + (total - end) * lineH + 'px"></div>';
+  el.innerHTML = html;
+
+  // Re-apply find highlights for the matches now in view.
+  if (anaFind.q && anaFind.matches.length) anaFindApplyHighlights();
+}
+
+// Re-measure line height and re-render the window (e.g. after a font-size change).
+function anaVirtRefresh() {
+  const el = document.getElementById('anaViewContent');
+  if (!el || !anaVirt.lines) return;
+  anaVirt.lineH = anaMeasureLineH(el) || anaVirt.lineH || 19;
+  anaVirt.start = -1;
+  anaVirt.end = -1;
+  anaVirtRender();
+}
 
 function anaRenderContent(text, rules) {
   const el = $('#anaViewContent');
@@ -1691,67 +1771,40 @@ function anaRenderContent(text, rules) {
   // Merge per-file manual highlights into the active rules so they colour text
   // and contribute nav chips alongside the built-in levels.
   const baseCompiled = rules && rules.compiled ? rules.compiled : [];
-  rules = { compiled: baseCompiled.concat(anaMarkCompiled()) };
+  const compiled = { compiled: baseCompiled.concat(anaMarkCompiled()) };
   const lines = text === ana.text ? anaGetLines() : String(text).split(/\r\n|\r|\n/);
-  const markers = [];
-  // Paint a small first slice synchronously (instant first paint), then insert
-  // ALL remaining lines in a SINGLE pass on the next frame. Many small rAF
-  // chunks are ~10x slower here: each chunk forces a fresh style/layout pass
-  // over the growing, content-visibility'd DOM, so the cost compounds (measured
-  // ~3.5s chunked vs ~0.36s single-insert for ~82k lines). A token cancels a
-  // half-finished render if another file (or a re-highlight) starts first.
-  const token = (anaRenderToken += 1);
   const total = lines.length;
-  const FIRST_PAINT = 1500;
+
+  // Scan every line once (cheap: ~45ms for 82k) to collect error/warn markers
+  // for the overview ruler and level navigation. The line HTML is built lazily,
+  // only for the visible window, by anaVirtRender.
+  const markers = [];
+  for (let i = 0; i < total; i += 1) {
+    const res = anaHighlightLine(lines[i], compiled);
+    if (res.level) markers.push({ i, level: res.level });
+  }
+
+  anaVirt.lines = lines;
+  anaVirt.rules = compiled;
+  anaVirt.total = total;
+  anaVirt.start = -1;
+  anaVirt.end = -1;
+
+  el.classList.add('nowrap'); // virtualization needs a fixed line height
   el.innerHTML = '';
+  anaVirt.lineH = anaMeasureLineH(el) || 19;
   const scroller = document.getElementById('anaScroll');
   if (scroller) scroller.scrollTop = 0;
 
-  function finalize() {
-    // Re-apply bookmarks + current line (preserved across re-highlight of the same file)
-    anaBm.lines.forEach((i) => {
-      const row = el.children[i];
-      if (row) row.classList.add('bookmarked');
-    });
-    if (anaBm.current >= 0 && el.children[anaBm.current]) {
-      el.children[anaBm.current].classList.add('current');
-    }
-    anaBuildRuler(markers, total);
-    anaBmUpdateCounter();
-    anaNav.markers = markers;
-    anaRenderLevels(markers);
-    anaNavRebuild();
-    // Rebuild search highlights over the freshly rendered DOM (e.g. after a
-    // highlight-type change) without moving the viewport.
-    if (anaFind.q) anaFindRun(anaFind.q, { keepPos: true, noScroll: true });
-  }
+  anaNav.markers = markers;
+  anaVirtRender();
 
-  let i = 0;
-  function renderUpTo(limit) {
-    if (token !== anaRenderToken) return false; // superseded by a newer render
-    const end = Math.min(limit, total);
-    let html = '';
-    for (; i < end; i += 1) {
-      const res = anaHighlightLine(lines[i], rules);
-      const lvl = res.tint ? ' lvl-' + res.tint : '';
-      if (res.level) markers.push({ i, level: res.level });
-      html += `<div class="ana-line${lvl}"><span class="ana-ln">${i + 1}</span><span class="ana-lc">${res.html}</span></div>`;
-    }
-    if (html) el.insertAdjacentHTML('beforeend', html);
-    return i < total;
-  }
-
-  // First slice paints almost immediately; the remainder is inserted in ONE
-  // pass on the next frame (avoids the many-small-chunk layout penalty above).
-  if (renderUpTo(FIRST_PAINT)) {
-    requestAnimationFrame(() => {
-      if (token !== anaRenderToken) return;
-      renderUpTo(total);
-      if (token === anaRenderToken) finalize();
-    });
-  } else if (token === anaRenderToken) {
-    finalize();
-  }
+  anaBuildRuler(markers, total);
+  anaBmUpdateCounter();
+  anaRenderLevels(markers);
+  anaNavRebuild();
+  // Rebuild search highlights (e.g. after a highlight-type change) without moving.
+  if (anaFind.q) anaFindRun(anaFind.q, { keepPos: true, noScroll: true });
 }
 
 
@@ -1805,18 +1858,20 @@ function anaUpdateRuler() {
 // Scroll the viewer so the given line index is centered, with a brief flash.
 function anaScrollToLine(idx, opts) {
   const scroller = document.getElementById('anaScroll');
-  const content = document.getElementById('anaViewContent');
-  if (!scroller || !content) return;
-  const row = content.children[idx];
-  if (!row) return;
-  const sRect = scroller.getBoundingClientRect();
-  const rRect = row.getBoundingClientRect();
-  scroller.scrollTop += rRect.top - sRect.top - scroller.clientHeight / 2 + rRect.height / 2;
+  if (!scroller || idx == null || idx < 0) return;
+  const lineH = anaVirt.lineH || 19;
+  scroller.scrollTop = Math.max(0, idx * lineH - scroller.clientHeight / 2 + lineH / 2);
+  anaVirtRender(); // render the window at the new position so the row exists
   if (opts && opts.noFlash) return;
+  const row = anaLineEl(idx);
+  if (!row) return;
   row.classList.remove('flash');
   void row.offsetWidth;
   row.classList.add('flash');
-  window.setTimeout(() => row.classList.remove('flash'), 1300);
+  window.setTimeout(() => {
+    const r = anaLineEl(idx);
+    if (r) r.classList.remove('flash');
+  }, 1300);
 }
 
 // Rebuild navigation targets from current markers, filtered by active levels.
@@ -2088,37 +2143,19 @@ function anaLevelGo(level, dir) {
 // Index of the first line currently visible at the top of the viewport.
 function anaFirstVisibleLine() {
   const scroller = document.getElementById('anaScroll');
-  const content = document.getElementById('anaViewContent');
-  if (!scroller || !content || !content.children.length) return 0;
-  const top = scroller.scrollTop;
-  const children = content.children;
-  let lo = 0;
-  let hi = children.length - 1;
-  let ans = 0;
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1;
-    const c = children[mid];
-    if (c.offsetTop + c.offsetHeight > top) {
-      ans = mid;
-      hi = mid - 1;
-    } else {
-      lo = mid + 1;
-    }
-  }
-  return ans;
+  if (!scroller || !anaVirt.total) return 0;
+  const lineH = anaVirt.lineH || 19;
+  const i = Math.floor(scroller.scrollTop / lineH);
+  return Math.max(0, Math.min(anaVirt.total - 1, i));
 }
 
 // Mark a line as the "current" one (reference for adding/navigating bookmarks).
 function anaSetCurrentLine(idx) {
-  const content = document.getElementById('anaViewContent');
-  if (!content) return;
-  const prev = content.querySelector('.ana-line.current');
-  if (prev) prev.classList.remove('current');
+  const prevEl = anaLineEl(anaBm.current);
+  if (prevEl) prevEl.classList.remove('current');
   anaBm.current = idx != null && idx >= 0 ? idx : -1;
-  if (anaBm.current >= 0) {
-    const row = content.children[anaBm.current];
-    if (row) row.classList.add('current');
-  }
+  const row = anaLineEl(anaBm.current);
+  if (row) row.classList.add('current');
 }
 
 // Line used when no explicit current line: the clicked line or the first visible.
@@ -2134,8 +2171,7 @@ function anaBmUpdateCounter() {
 
 // Toggle a bookmark on the given line and refresh the gutter, ruler and counter.
 function anaBmToggle(idx) {
-  const content = document.getElementById('anaViewContent');
-  if (!content || idx == null || idx < 0 || idx >= content.children.length) return;
+  if (idx == null || idx < 0 || idx >= anaVirt.total) return;
   let added;
   if (anaBm.lines.has(idx)) {
     anaBm.lines.delete(idx);
@@ -2144,9 +2180,9 @@ function anaBmToggle(idx) {
     anaBm.lines.add(idx);
     added = true;
   }
-  const row = content.children[idx];
+  const row = anaLineEl(idx);
   if (row) row.classList.toggle('bookmarked', added);
-  anaBuildRuler(anaNav.markers, content.children.length);
+  anaBuildRuler(anaNav.markers, anaVirt.total);
   anaBmUpdateCounter();
   const label = added ? t('ana.bm.added', '已加入書籤') : t('ana.bm.removed', '已移除書籤');
   toast(`${label} · ${t('ana.line', '行')} ${idx + 1}`, added ? 'success' : 'info');
@@ -2235,9 +2271,7 @@ $('#btnAnaOpen').addEventListener('click', () => {
       anaApplyFilter();
     });
   }
-  // Viewer preference controls (word-wrap toggle + font zoom).
-  const wrapBtn = document.getElementById('btnAnaWrap');
-  if (wrapBtn) wrapBtn.addEventListener('click', anaToggleWrap);
+  // Viewer font zoom controls.
   const zin = document.getElementById('btnAnaZoomIn');
   if (zin) zin.addEventListener('click', () => anaSetFont(ana.font + 1));
   const zout = document.getElementById('btnAnaZoomOut');
@@ -2267,12 +2301,9 @@ $('#anaHlSelect').addEventListener('change', async (e) => {
   anaRenderContent(ana.text, rules);
 });
 $('#btnAnaCopy').addEventListener('click', async () => {
-  const cells = $('#anaViewContent').querySelectorAll('.ana-lc');
-  const text = cells.length
-    ? Array.from(cells)
-        .map((n) => n.textContent)
-        .join('\n')
-    : $('#anaViewContent').textContent || '';
+  // Virtualized: only the visible window is in the DOM, so copy from the full
+  // lines array rather than the rendered cells.
+  const text = (anaGetLines() || []).join('\n');
   if (!text) return;
   try {
     await navigator.clipboard.writeText(text);
@@ -2380,6 +2411,7 @@ function anaUpdateRulerThrottled() {
   if (anaRulerRaf) return;
   anaRulerRaf = requestAnimationFrame(() => {
     anaRulerRaf = 0;
+    anaVirtRender();
     anaUpdateRuler();
   });
 }
@@ -2403,11 +2435,17 @@ if (document.getElementById('anaLevels')) {
 }
 if (document.getElementById('anaViewContent')) {
   document.getElementById('anaViewContent').addEventListener('click', (e) => {
-    const content = document.getElementById('anaViewContent');
+    // Keep keyboard focus on the scroller (which survives the virtualized
+    // window rebuilds) so PgUp/PgDn/Home/End keep working. Skip when the user
+    // just made a text selection so we don't disturb it.
+    const sc = document.getElementById('anaScroll');
+    if (sc && window.getSelection && window.getSelection().isCollapsed) {
+      sc.focus({ preventScroll: true });
+    }
     const line = e.target.closest('.ana-line');
-    if (!line || !content.contains(line)) return;
-    const idx = Array.prototype.indexOf.call(content.children, line);
-    if (idx >= 0) anaSetCurrentLine(idx);
+    if (!line) return;
+    const idx = parseInt(line.dataset.i, 10);
+    if (!Number.isNaN(idx)) anaSetCurrentLine(idx);
   });
 }
 
@@ -2631,13 +2669,11 @@ function anaFindRange(lineEl, start, end) {
 
 function anaFindApplyHighlights() {
   if (!anaFindSupported) return;
-  const content = document.getElementById('anaViewContent');
-  if (!content) return;
   const all = new Highlight();
   const cur = new Highlight();
   for (let i = 0; i < anaFind.matches.length; i += 1) {
     const m = anaFind.matches[i];
-    const lineEl = content.children[m.line];
+    const lineEl = anaLineEl(m.line);
     if (!lineEl) continue;
     const range = anaFindRange(lineEl, m.start, m.end);
     if (!range) continue;
