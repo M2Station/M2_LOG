@@ -1898,10 +1898,24 @@ function anaVirtRender() {
         : t('ana.fold.lines', '{n} hidden lines').replace('{n}', row.count);
       const label = row.open ? escapeHtml(t('ana.fold', '收折')) : String(row.count);
       const cls = 'ana-foldrow' + (row.open ? ' open' : '') + (row.foot ? ' foot' : '');
+      // When expanded, the top bar gets a "jump to the bottom of this section"
+      // arrow and the bottom bar a "jump to the top" arrow.
+      let jump = '';
+      if (row.open) {
+        const arrow = row.foot
+          ? '<polyline points="18 15 12 9 6 15"/>'
+          : '<polyline points="6 9 12 15 18 9"/>';
+        const jt = row.foot
+          ? t('ana.fold.toTop', '跳到此段最上緣')
+          : t('ana.fold.toBottom', '跳到此段最下緣');
+        jump =
+          '<button class="ana-fold-jump" type="button" data-jump="' + (row.foot ? 'up' : 'down') + '" title="' + jt + '">' +
+          '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">' + arrow + '</svg></button>';
+      }
       html +=
-        '<div class="' + cls + '" data-fold="' + row.start + '" style="height:' + lineH + 'px" title="' + title + '">' +
+        '<div class="' + cls + '" data-fold="' + row.start + '" data-count="' + row.count + '" style="height:' + lineH + 'px" title="' + title + '">' +
         '<span class="ana-fold-bar"><span class="ana-fold-ic"></span>' +
-        '<span class="ana-fold-n">' + label + '</span></span></div>';
+        '<span class="ana-fold-n">' + label + '</span></span>' + jump + '</div>';
       continue;
     }
     const i = row.line;
@@ -1955,7 +1969,11 @@ function anaRenderContent(text, rules) {
   anaVirt.start = -1;
   anaVirt.end = -1;
   // Highlighted lines never fold; collapse all non-highlighted runs by default.
-  anaVirt.hlSet = new Set(markers.map((m) => m.i));
+  // Only currently-enabled levels count as "highlighted", so toggling a level
+  // off folds its lines too.
+  anaVirt.hlSet = new Set(
+    markers.filter((m) => anaNav.levels[m.level] !== false).map((m) => m.i)
+  );
   anaFold.open.clear();
 
   el.classList.add('nowrap'); // virtualization needs a fixed line height
@@ -2648,6 +2666,16 @@ if (document.getElementById('anaViewContent')) {
     if (foldRow) {
       const start = parseInt(foldRow.dataset.fold, 10);
       if (!Number.isNaN(start)) {
+        // The jump arrow on an expanded bar navigates within the run instead of
+        // collapsing it: down → bottom edge, up → top edge.
+        const jumpBtn = e.target.closest('.ana-fold-jump');
+        if (jumpBtn) {
+          const count = parseInt(foldRow.dataset.count, 10) || 1;
+          const target = jumpBtn.dataset.jump === 'up' ? start : start + count - 1;
+          anaScrollToLine(target);
+          anaSetCurrentLine(target);
+          return;
+        }
         const wasOpen = anaFold.open.has(start);
         if (wasOpen) anaFold.open.delete(start);
         else anaFold.open.add(start);

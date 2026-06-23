@@ -75,6 +75,8 @@
   "ana.fold": "收折",
   "ana.fold.title": "收折未標記的內容，只顯示被標記的行",
   "ana.fold.lines": "已收折 {n} 行，點擊展開",
+  "ana.fold.toBottom": "跳到此段最下練",
+  "ana.fold.toTop": "跳到此段最上練",
   "ana.hl.auto": "自動",
   "ana.hl.none": "關閉",
   "ana.copy": "複製",

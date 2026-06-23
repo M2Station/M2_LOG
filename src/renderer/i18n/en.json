@@ -77,6 +77,8 @@
   "ana.fold": "Fold",
   "ana.fold.title": "Fold lines without highlights, showing only highlighted lines",
   "ana.fold.lines": "{n} hidden lines — click to expand",
+  "ana.fold.toBottom": "Jump to the bottom of this section",
+  "ana.fold.toTop": "Jump to the top of this section",
   "ana.copy": "Copy",
   "ana.zoomIn.title": "Zoom in (Ctrl +)",
   "ana.zoomOut.title": "Zoom out (Ctrl -)",

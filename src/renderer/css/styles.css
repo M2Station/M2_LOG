@@ -1390,6 +1390,21 @@ body.ana-ruler-dragging .ana-ruler-view {
   font-variant-numeric: tabular-nums;
   opacity: 0.95;
 }
+.ana-fold-jump {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 8px;
+  padding: 1px 4px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+}
+.ana-fold-jump:hover {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
 
 /* Toolbar fold toggle active state (mirrors the other ghost toggles). */
 #btnAnaFold.on {
