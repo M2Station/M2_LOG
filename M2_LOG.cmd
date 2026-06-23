@@ -64,11 +64,20 @@ if exist "node_modules\electron\install.js" (
     node "node_modules\electron\install.js"
 )
 if exist "%ELECTRON%" exit /b 0
+REM install.js (via the "extract-zip" package) can silently fail to unpack the
+REM binary - antivirus, locked files, or long paths leave dist with only a
+REM "locales" folder yet exit 0. The valid binary zip is still in Electron's
+REM download cache, so extract it directly with .NET (reliable on Windows).
+echo [INFO] Repairing from the Electron download cache ...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\repair-electron.ps1"
+if exist "%ELECTRON%" exit /b 0
 REM Still missing - clean reinstall, then download again as a safety net.
 echo [INFO] Reinstalling dependencies ...
 if exist "node_modules\electron" rmdir /s /q "node_modules\electron"
 call npm install
 if not exist "%ELECTRON%" if exist "node_modules\electron\install.js" node "node_modules\electron\install.js"
+REM Final attempt: extract the freshly downloaded zip directly from the cache.
+if not exist "%ELECTRON%" powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\repair-electron.ps1"
 exit /b 0
 
 REM ============================================================
