@@ -122,6 +122,8 @@ the static self-tests.
 > ARM64 builds cross-compile fine from an x64 machine — electron-builder downloads the
 > matching ARM64 Electron binaries automatically.
 
+> 🚀 To cut a versioned GitHub Release, see [docs/RELEASE.md](docs/RELEASE.md).
+
 ---
 
 ## 🗂️ Project structure
@@ -264,6 +266,8 @@ npm run dist
 只想建置單一架構時，使用 `npm run dist:x64` 或 `npm run dist:arm64`。`npm run pack` 則只產生未封裝的 `dist\win-unpacked\`（測試用）。`npm test` 執行靜態自我測試。
 
 > 在 x64 機器上也能順利交叉編譯出 ARM64 版本 — electron-builder 會自動下載對應的 ARM64 Electron 二進位檔。
+
+> 🚀 要發佈帶版號的 GitHub Release,請參考 [docs/RELEASE.md](docs/RELEASE.md)。
 
 ---
 
