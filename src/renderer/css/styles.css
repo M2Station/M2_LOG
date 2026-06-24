@@ -1120,6 +1120,61 @@ body.ana-ruler-dragging .ana-ruler-view {
   background: rgba(130, 150, 210, 0.55);
 }
 
+/* Floating "jump to this expanded run's top/bottom edge" buttons. They sit at
+   the right edge, vertically centred just left of the minimap, and only appear
+   while you browse inside an expanded fold whose edge is scrolled off-screen. */
+.ana-fold-edges {
+  position: absolute;
+  right: 44px;
+  top: 50%;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%) translateX(6px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.ana-fold-edges.show {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(-50%) translateX(0);
+}
+.ana-fold-edge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--panel) 86%, transparent);
+  color: var(--accent);
+  cursor: pointer;
+  box-shadow: 0 2px 9px rgba(0, 0, 0, 0.28);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease;
+}
+.ana-fold-edge:hover {
+  background: color-mix(in srgb, var(--accent) 20%, var(--panel));
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+.ana-fold-edge:active {
+  transform: scale(0.9);
+}
+.ana-fold-edge:disabled {
+  opacity: 0.32;
+  cursor: default;
+  box-shadow: none;
+}
+.ana-fold-edge:disabled:hover {
+  background: color-mix(in srgb, var(--panel) 86%, transparent);
+  border-color: var(--border);
+}
+
 /* ---------- In-viewer search (Ctrl+F) ---------- */
 .ana-find {
   position: absolute;
@@ -1412,23 +1467,49 @@ body.ana-ruler-dragging .ana-ruler-view {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
-/* Pulse a just-expanded run's background once, slowly, to point it out. */
-@keyframes anaFoldFlash {
+/* Breathing-light cue: a single quick, smooth swell of the accent wash that
+   points out a just-folded/expanded run. The brightness follows a sine profile
+   (glides up, lingers softly at the peak, eases back down) and uses `linear`
+   timing so the curve comes purely from these stops — a crisp breath, not a
+   blink. */
+@keyframes anaFoldBreath {
   0% {
     background: transparent;
   }
+  10% {
+    background: color-mix(in srgb, var(--accent) 9%, transparent);
+  }
+  20% {
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+  30% {
+    background: color-mix(in srgb, var(--accent) 24%, transparent);
+  }
+  40% {
+    background: color-mix(in srgb, var(--accent) 29%, transparent);
+  }
   50% {
-    background: color-mix(in srgb, var(--accent) 34%, transparent);
+    background: color-mix(in srgb, var(--accent) 32%, transparent);
+  }
+  60% {
+    background: color-mix(in srgb, var(--accent) 29%, transparent);
+  }
+  70% {
+    background: color-mix(in srgb, var(--accent) 24%, transparent);
+  }
+  80% {
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+  90% {
+    background: color-mix(in srgb, var(--accent) 9%, transparent);
   }
   100% {
     background: transparent;
   }
 }
-.ana-line.foldflash {
-  animation: anaFoldFlash 1.2s ease-in-out;
-}
+.ana-line.foldflash,
 .ana-foldrow.foldflash {
-  animation: anaFoldFlash 1.2s ease-in-out;
+  animation: anaFoldBreath 0.9s linear;
 }
 
 .hl-error {
