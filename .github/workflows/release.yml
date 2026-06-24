@@ -1,10 +1,10 @@
 name: Release
 
-# Publish a Windows installer when a version tag is pushed, e.g.:
+# Publish Windows installers when a version tag is pushed, e.g.:
 #   git tag v1.0.0
 #   git push origin v1.0.0
-# Builds the NSIS installer with electron-builder and attaches it to a GitHub
-# Release created for the tag.
+# Builds the NSIS installers (x64 + ARM64) with electron-builder and attaches
+# them to a GitHub Release created for the tag.
 
 on:
   push:
@@ -58,9 +58,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $setup = Get-ChildItem dist -Filter '*Setup*.exe' | Select-Object -First 1
-          if (-not $setup) { $setup = Get-ChildItem dist -Filter '*.exe' | Select-Object -First 1 }
-          if (-not $setup) { Write-Host "No installer .exe found in dist/"; exit 1 }
+          $installers = @(Get-ChildItem dist -Filter '*.exe' -File)
+          if ($installers.Count -eq 0) { Write-Host "No installer .exe found in dist/"; exit 1 }
+          Write-Host "Attaching $($installers.Count) installer(s):"
+          $installers | ForEach-Object { Write-Host "  - $($_.Name)" }
           $tag = $env:GITHUB_REF_NAME
-          $notes = "Automated Windows x64 installer for M2_LOG $tag.`n`nRun the Setup .exe and follow the interactive installer."
-          gh release create $tag $setup.FullName --title "M2_LOG $tag" --notes $notes
+          $notes = "Automated Windows installers (x64 + ARM64) for M2_LOG $tag.`n`nDownload the installer matching your CPU architecture, run it, and follow the interactive installer."
+          gh release create $tag $installers.FullName --title "M2_LOG $tag" --notes $notes
