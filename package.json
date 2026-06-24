@@ -10,7 +10,9 @@
     "icon": "node scripts/make-icon.mjs",
     "test": "node --test test/selftest.test.js",
     "pack": "electron-builder --dir",
-    "dist": "electron-builder"
+    "dist": "electron-builder --win --x64 --arm64",
+    "dist:x64": "electron-builder --win --x64",
+    "dist:arm64": "electron-builder --win --arm64"
   },
   "build": {
     "appId": "com.m2station.m2log",
@@ -30,8 +32,17 @@
       }
     ],
     "win": {
-      "target": "nsis",
-      "icon": "build/icon.ico"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "nsis": {
       "oneClick": false,

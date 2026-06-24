@@ -102,15 +102,25 @@ LOG_OUTPUT/
 
 ## 📦 Build the installer
 
-Uses [electron-builder](https://www.electron.build/) to produce a Windows NSIS installer:
+Uses [electron-builder](https://www.electron.build/) to produce Windows NSIS installers for
+both **x64** and **ARM64**:
 
 ```powershell
 npm install
 npm run dist
 ```
 
-Produces `dist\M2_LOG Setup <version>.exe`. `npm run pack` builds only the unpacked
-`dist\win-unpacked\` (for testing). `npm test` runs the static self-tests.
+Produces one installer per architecture:
+
+- `dist\M2_LOG-<version>-x64.exe`
+- `dist\M2_LOG-<version>-arm64.exe`
+
+To build a single architecture only, use `npm run dist:x64` or `npm run dist:arm64`.
+`npm run pack` builds only the unpacked `dist\win-unpacked\` (for testing). `npm test` runs
+the static self-tests.
+
+> ARM64 builds cross-compile fine from an x64 machine — electron-builder downloads the
+> matching ARM64 Electron binaries automatically.
 
 ---
 
@@ -239,14 +249,21 @@ LOG_OUTPUT/
 
 ## 📦 打包安裝檔
 
-使用 [electron-builder](https://www.electron.build/) 產生 Windows NSIS 安裝檔：
+使用 [electron-builder](https://www.electron.build/) 同時產生 **x64** 與 **ARM64** 兩種 Windows NSIS 安裝檔：
 
 ```powershell
 npm install
 npm run dist
 ```
 
-產生 `dist\M2_LOG Setup <版本>.exe`。`npm run pack` 則只產生未封裝的 `dist\win-unpacked\`（測試用）。`npm test` 執行靜態自我測試。
+會依架構各產生一個安裝檔：
+
+- `dist\M2_LOG-<版本>-x64.exe`
+- `dist\M2_LOG-<版本>-arm64.exe`
+
+只想建置單一架構時，使用 `npm run dist:x64` 或 `npm run dist:arm64`。`npm run pack` 則只產生未封裝的 `dist\win-unpacked\`（測試用）。`npm test` 執行靜態自我測試。
+
+> 在 x64 機器上也能順利交叉編譯出 ARM64 版本 — electron-builder 會自動下載對應的 ARM64 Electron 二進位檔。
 
 ---
 
