@@ -1002,6 +1002,9 @@ const ana = {
 // Which collapsed runs are currently expanded, keyed by the run's first line
 // index. Reset whenever a file is (re)rendered.
 const anaFold = { open: new Set() };
+// The expanded run currently under the viewport (start/end line indices) that
+// the floating edge-jump buttons target; {-1, -1} when none is in view.
+const anaFoldEdge = { start: -1, end: -1 };
 const anaNav = { markers: [], targets: [], pos: -1, line: -1, levels: {} };
 // Bookmarks: `lines` points at the active file's set; `store` keeps one set per
 // file path so bookmarks survive switching files and coming back (per session).
@@ -1708,6 +1711,7 @@ const anaVirt = {
   end: -1,
   scheduled: false,
   rows: null,
+  runs: null,
   rowCount: 0,
   lineRow: null,
   lineDisplayRow: null,
@@ -1721,6 +1725,7 @@ const anaVirt = {
 function anaBuildRows() {
   const total = anaVirt.total;
   const rows = [];
+  const runs = [];
   const lineRow = total ? new Int32Array(total).fill(-1) : new Int32Array(0);
   const dispRow = total ? new Int32Array(total) : new Int32Array(0);
   const hl = anaVirt.hlSet;
@@ -1742,6 +1747,7 @@ function anaBuildRows() {
         const a = i;
         while (i < total && !hl.has(i)) i += 1;
         const count = i - a;
+        runs.push({ start: a, end: i - 1 });
         const open = anaFold.open.has(a);
         if (open) {
           // Expanded: a collapse bar above and below the revealed lines so the
@@ -1765,6 +1771,7 @@ function anaBuildRows() {
   }
   anaVirt.rows = rows;
   anaVirt.rowCount = rows.length;
+  anaVirt.runs = runs;
   anaVirt.lineRow = lineRow;
   anaVirt.lineDisplayRow = dispRow;
 }
@@ -1798,11 +1805,83 @@ function anaFoldApply(anchorLine) {
   anaVirtRender();
   anaBuildRuler(anaNav.markers, anaVirt.total);
   anaUpdateRuler();
+  anaUpdateFoldEdges();
 }
 
-// Flash the lines of a just-expanded run (once, slowly) so the user can see
-// which section opened. Best-effort: only the lines currently in the rendered
-// window animate; off-screen lines are ignored.
+// Line index -> its non-highlighted run {start, end} (binary search over the
+// run table cached by anaBuildRows), or null when the line is highlighted.
+function anaRunAtLine(idx) {
+  const runs = anaVirt.runs;
+  if (!runs || !runs.length || idx == null || idx < 0) return null;
+  let lo = 0;
+  let hi = runs.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const r = runs[mid];
+    if (idx < r.start) hi = mid - 1;
+    else if (idx > r.end) lo = mid + 1;
+    else return r;
+  }
+  return null;
+}
+
+// The expanded (currently open) run that contains line `idx`, or null.
+function anaOpenRunAt(idx) {
+  if (!ana.fold) return null;
+  const r = anaRunAtLine(idx);
+  return r && anaFold.open.has(r.start) ? r : null;
+}
+
+// The expanded run filling the viewport now: prefer the line at the vertical
+// centre (where the buttons sit), fall back to the first visible line.
+function anaCurrentOpenRun() {
+  if (!ana.fold || !anaVirt.rows || !anaVirt.rowCount) return null;
+  const scroller = document.getElementById('anaScroll');
+  if (!scroller) return null;
+  const lineH = anaVirt.lineH || 19;
+  const rows = anaVirt.rows;
+  const lineAtPx = (px) => {
+    const r = Math.max(0, Math.min(rows.length - 1, Math.floor(px / lineH)));
+    const row = rows[r];
+    return row.fold ? row.start : row.line;
+  };
+  const mid = lineAtPx(scroller.scrollTop + scroller.clientHeight / 2);
+  return anaOpenRunAt(mid) || anaOpenRunAt(anaFirstVisibleLine());
+}
+
+// Show the floating top/bottom edge-jump buttons while an expanded run is in
+// view and an edge is off-screen; disable the button whose edge is already
+// visible. Remembers the target run for the click handlers.
+function anaUpdateFoldEdges() {
+  const box = document.getElementById('anaFoldEdges');
+  if (!box) return;
+  const topBtn = document.getElementById('btnAnaFoldTop');
+  const bottomBtn = document.getElementById('btnAnaFoldBottom');
+  const run = anaCurrentOpenRun();
+  let upUseful = false;
+  let downUseful = false;
+  if (run) {
+    const scroller = document.getElementById('anaScroll');
+    const lineH = anaVirt.lineH || 19;
+    const lr = anaVirt.lineRow;
+    const topRow = lr && run.start < lr.length ? lr[run.start] : -1;
+    const botRow = lr && run.end < lr.length ? lr[run.end] : -1;
+    const firstVis = Math.floor(scroller.scrollTop / lineH);
+    const lastVis = Math.ceil((scroller.scrollTop + scroller.clientHeight) / lineH);
+    upUseful = topRow >= 0 && topRow < firstVis;
+    downUseful = botRow >= 0 && botRow > lastVis;
+  }
+  const show = upUseful || downUseful;
+  anaFoldEdge.start = show ? run.start : -1;
+  anaFoldEdge.end = show ? run.end : -1;
+  if (topBtn) topBtn.disabled = !upUseful;
+  if (bottomBtn) bottomBtn.disabled = !downUseful;
+  box.classList.toggle('show', show);
+}
+
+// Breathe the lines of a just-expanded run (a gentle accent pulse) so the user
+// can see which section opened. Best-effort: only the lines currently in the
+// rendered window animate; off-screen lines are ignored.
 function anaFoldFlashRun(start) {
   if (start == null || start < 0 || !anaVirt.hlSet) return;
   let end = start;
@@ -1819,10 +1898,10 @@ function anaFoldFlashRun(start) {
       const el = anaLineEl(i);
       if (el) el.classList.remove('foldflash');
     }
-  }, 1300);
+  }, 1100);
 }
 
-// Flash the collapsed fold bar of a just-folded run, so it's clear where the
+// Breathe the collapsed fold bar of a just-folded run, so it's clear where the
 // hidden lines went.
 function anaFoldFlashBar(start) {
   const el = document.getElementById('anaViewContent');
@@ -1832,7 +1911,7 @@ function anaFoldFlashBar(start) {
   bar.classList.remove('foldflash');
   void bar.offsetWidth; // restart the animation if the class lingered
   bar.classList.add('foldflash');
-  window.setTimeout(() => bar.classList.remove('foldflash'), 1300);
+  window.setTimeout(() => bar.classList.remove('foldflash'), 1100);
 }
 
 // Toolbar toggle: fold/unfold the non-highlighted runs.
@@ -2005,6 +2084,7 @@ function anaRenderContent(text, rules) {
   anaNavRebuild();
   // Rebuild search highlights (e.g. after a highlight-type change) without moving.
   if (anaFind.q) anaFindRun(anaFind.q, { keepPos: true, noScroll: true });
+  anaUpdateFoldEdges();
 }
 
 
@@ -2078,6 +2158,7 @@ function anaScrollToLine(idx, opts) {
   scroller.scrollTop = Math.max(0, rowIdx * lineH - scroller.clientHeight / 2 + lineH / 2);
   anaVirtRender(); // render the window at the new position so the row exists
   anaUpdateRuler();
+  anaUpdateFoldEdges();
   if (opts && opts.noFlash) return;
   const row = anaLineEl(idx);
   if (!row) return;
@@ -2652,12 +2733,29 @@ function anaUpdateRulerThrottled() {
     anaRulerRaf = 0;
     anaVirtRender();
     anaUpdateRuler();
+    anaUpdateFoldEdges();
   });
 }
 if (document.getElementById('anaScroll')) {
   document.getElementById('anaScroll').addEventListener('scroll', anaUpdateRulerThrottled, { passive: true });
 }
 window.addEventListener('resize', anaUpdateRulerThrottled);
+// Floating edge-jump buttons: hop to the top / bottom edge of the expanded run
+// currently in view (its fold bars may be scrolled off-screen).
+if (document.getElementById('btnAnaFoldTop')) {
+  document.getElementById('btnAnaFoldTop').addEventListener('click', () => {
+    if (anaFoldEdge.start < 0) return;
+    anaScrollToLine(anaFoldEdge.start);
+    anaSetCurrentLine(anaFoldEdge.start);
+  });
+}
+if (document.getElementById('btnAnaFoldBottom')) {
+  document.getElementById('btnAnaFoldBottom').addEventListener('click', () => {
+    if (anaFoldEdge.end < 0) return;
+    anaScrollToLine(anaFoldEdge.end);
+    anaSetCurrentLine(anaFoldEdge.end);
+  });
+}
 $('#btnAnaPrev').addEventListener('click', () => anaNavGo(-1));
 $('#btnAnaNext').addEventListener('click', () => anaNavGo(1));
 $('#chipBm').addEventListener('click', () => anaBmGo(1));
