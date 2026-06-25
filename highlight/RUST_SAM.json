@@ -12,9 +12,29 @@
       "pattern": "\\b(?:warn(?:ing)?|timeout|timed?\\s*out|retry|retries|retrying|busy|skip(?:ped)?)\\b"
     },
     {
+      "name": "PowerSequence",
+      "level": "pwrseq",
+      "pattern": "-{3,}(?:Start\\s+[A-Za-z0-9]+\\s*->\\s*[A-Za-z0-9]+|Press\\s+Power\\s+Button)-{3,}|\\b(?:power\\s*sequence|power\\s+(?:on|off)|cold\\s+boot|warm\\s+(?:boot|reset)|reset\\s+reason|reboot|shutdown)\\b"
+    },
+    {
       "name": "SocSubsystem",
       "level": "socss",
-      "pattern": "-{3,}(?:Start\\s+[A-Za-z0-9]+\\s*->\\s*[A-Za-z0-9]+|Press\\s+Power\\s+Button)-{3,}|\\b(?:powersequence|boot\\s+failure|reset\\s+reason)\\b"
+      "pattern": "\\bboot\\s+failure\\b"
+    },
+    {
+      "name": "DebugSSH",
+      "level": "debugssh",
+      "pattern": "^\\s*\\.[a-z][a-z0-9_]*\\b"
+    },
+    {
+      "name": "KeyboardHID",
+      "level": "kbdhid",
+      "pattern": "\\b(?:i2c_hid_host_task|i2c_hid_device_task|kb)\\s*:"
+    },
+    {
+      "name": "Interrupt",
+      "level": "intr",
+      "pattern": "\\b(?:interrupts?|irqs?|(?:de)?asserting\\s+interrupt|host\\s+interrupt\\s+(?:de)?asserted)\\b"
     },
     {
       "name": "UEFI_SSH",

@@ -1638,7 +1638,7 @@ async function anaPopulateHl() {
   sel.value = ana.hl || 'auto';
 }
 
-const ANA_RANK = { info: 1, warn: 2, error: 3 };
+const ANA_RANK = { info: 1, intr: 1.5, warn: 2, error: 3 };
 
 function anaHighlightLine(line, rules) {
   // Match against the RAW text (not HTML-escaped) so patterns can use real
@@ -2228,7 +2228,22 @@ function anaNavGo(dir) {
 /* ---------- Highlight levels (dynamic, expandable nav chips) ---------- */
 // Known level colors; unknown levels (e.g. BOOTMODE) get a palette color.
 const ANA_LEVEL_COLORS = { error: '#ff6b81', warn: '#fbbf24', info: '#60a5fa' };
-const ANA_LEVEL_PALETTE = ['#34d399', '#a78bfa', '#22d3ee', '#f472b6', '#f59e0b', '#38bdf8', '#c084fc', '#4ade80'];
+// Palette for custom levels. Deliberately avoids the hue bands of the three
+// reserved colours — error (red/pink ~350°), warn (amber ~45°) and info
+// (blue ~215°) — so a custom chip never looks like error/warn/info. Ordered to
+// maximise hue distance between neighbours; only repeats after 10 levels.
+const ANA_LEVEL_PALETTE = [
+  '#34d399', // emerald   ~157°
+  '#a78bfa', // violet    ~255°
+  '#22d3ee', // cyan      ~187°
+  '#e879f9', // fuchsia   ~291°
+  '#a3e635', // lime      ~ 82°
+  '#c084fc', // purple    ~270°
+  '#4ade80', // green     ~142°
+  '#2dd4bf', // teal      ~172°
+  '#d8b4fe', // lavender  ~270°
+  '#5eead4', // aqua      ~166°
+];
 const ANA_BUILTIN_LEVELS = new Set(['error', 'warn', 'info']);
 const anaLevelColorMap = {};
 let anaLevelPaletteIdx = 0;
@@ -2253,7 +2268,11 @@ function anaLevelLabel(level) {
   if (level === 'version') return t('ana.version', '版號');
   if (level === 'boot') return t('ana.boot', '開機點');
   if (level === 'membucket') return t('ana.membucket', '記憶體配置');
+  if (level === 'pwrseq') return t('ana.pwrseq', '電源序列');
   if (level === 'socss') return t('ana.socss', 'SoC子系統');
+  if (level === 'debugssh') return t('ana.debugssh', 'DebugSSH');
+  if (level === 'kbdhid') return t('ana.kbdhid', 'Keyboard HID');
+  if (level === 'intr') return t('ana.intr', '中斷');
   if (level === 'uefissh') return t('ana.uefissh', 'UEFI_SSH');
   if (level === 'pd') return t('ana.pd', 'PD');
   if (anaIsMarkLevel(level)) return anaMarkLabel(level);
