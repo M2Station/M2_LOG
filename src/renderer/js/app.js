@@ -337,7 +337,7 @@ function renderLogs() {
     ta.value = log.content;
     ta.addEventListener('input', () => {
       log.content = ta.value;
-      updateCounter();
+      updateCounterSoon();
       saveLogs();
     });
 
@@ -370,6 +370,18 @@ function updateCounter() {
   $('#counter').textContent = t('counter.tpl', '{lines} 行 · {chars} 字元')
     .replace('{lines}', lines)
     .replace('{chars}', chars);
+}
+
+// Debounced variant for the high-frequency textarea `input` event: counting a
+// very large pasted LOG re-splits the whole string, so coalesce rapid keystrokes
+// into one update instead of recomputing on every character.
+let counterTimer = 0;
+function updateCounterSoon() {
+  if (counterTimer) clearTimeout(counterTimer);
+  counterTimer = setTimeout(() => {
+    counterTimer = 0;
+    updateCounter();
+  }, 150);
 }
 
 /* ---------- Form persistence ---------- */

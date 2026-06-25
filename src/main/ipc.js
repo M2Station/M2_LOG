@@ -9,6 +9,7 @@
 'use strict';
 
 const fs = require('fs');
+const fsp = fs.promises;
 const path = require('path');
 const { ipcMain, dialog, BrowserWindow, app, shell } = require('electron');
 const { exportLog, exportSingleLog, openFolder } = require('./logwriter');
@@ -126,20 +127,22 @@ function registerIpc() {
     }
   });
 
-  // List a directory (one level) for the file tree.
+  // List a directory (one level) for the file tree. Stats run concurrently so a
+  // large folder does not serialize one blocking syscall per entry.
   ipcMain.handle('fs:list', async (_evt, dirPath) => {
     try {
       const p = String(dirPath || '');
       if (!p) return { ok: false, error: 'No path' };
-      const st = fs.statSync(p);
+      const st = await fsp.stat(p);
       if (!st.isDirectory()) return { ok: false, error: 'Not a directory' };
-      const entries = fs.readdirSync(p, { withFileTypes: true }).map((e) => {
+      const dirents = await fsp.readdir(p, { withFileTypes: true });
+      const entries = await Promise.all(dirents.map(async (e) => {
         const full = path.join(p, e.name);
         let isDir = e.isDirectory();
         let size = 0;
         let mtime = 0;
         try {
-          const s = fs.statSync(full);
+          const s = await fsp.stat(full);
           isDir = s.isDirectory();
           size = s.size;
           mtime = s.mtimeMs;
@@ -147,7 +150,7 @@ function registerIpc() {
           /* ignore entries we cannot stat */
         }
         return { name: e.name, path: full, isDir, size, mtime, ext: path.extname(e.name).slice(1).toLowerCase() };
-      });
+      }));
       return { ok: true, path: p, entries };
     } catch (err) {
       return { ok: false, error: err.message };
@@ -158,19 +161,19 @@ function registerIpc() {
   ipcMain.handle('fs:readText', async (_evt, filePath) => {
     try {
       const p = String(filePath || '');
-      const st = fs.statSync(p);
+      const st = await fsp.stat(p);
       if (!st.isFile()) return { ok: false, error: 'Not a file' };
       const MAX = 5 * 1024 * 1024;
       const len = Math.min(st.size, MAX);
-      const fd = fs.openSync(p, 'r');
+      const fh = await fsp.open(p, 'r');
       try {
         const buf = Buffer.alloc(len);
-        if (len > 0) fs.readSync(fd, buf, 0, len, 0);
+        if (len > 0) await fh.read(buf, 0, len, 0);
         const probe = buf.subarray(0, Math.min(len, 8192));
         if (probe.includes(0)) return { ok: false, binary: true, error: 'Binary file', size: st.size };
         return { ok: true, path: p, name: path.basename(p), size: st.size, content: buf.toString('utf8'), truncated: st.size > MAX };
       } finally {
-        fs.closeSync(fd);
+        await fh.close();
       }
     } catch (err) {
       return { ok: false, error: err.message };
