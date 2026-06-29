@@ -1,0 +1,50 @@
+{
+  "_comment": "SAM log highlight rules. Edit this file to add/adjust highlighting. Each rule: name, level (error|warn|info, or a custom level e.g. powerseq), pattern (JavaScript regex source, case-insensitive). Whole-line tint follows the highest level matched on that line.",
+  "rules": [
+    {
+      "name": "error",
+      "level": "error",
+      "pattern": "\\b(?:error|err|fail(?:ed|ure)?|fatal|panic|exception|nak|crc(?:\\s*error)?|fault|invalid|corrupt(?:ed)?|denied)\\b"
+    },
+    {
+      "name": "warning",
+      "level": "warn",
+      "pattern": "\\b(?:warn(?:ing)?|timeout|timed?\\s*out|retry|retries|retrying|busy|skip(?:ped)?)\\b"
+    },
+    {
+      "name": "SocSubsystem",
+      "level": "socss",
+      "pattern": "-{3,}(?:Start\\s+[A-Za-z0-9]+\\s*->\\s*[A-Za-z0-9]+|Press\\s+Power\\s+Button)-{3,}|\\b(?:powersequence|boot\\s+failure|reset\\s+reason)\\b"
+    },
+    {
+      "name": "SoCStatus",
+      "level": "socss",
+      "pattern": "SoC\\s*:\\s*(?:Current\\s+State|Capability\\s+Bytes)\\s*:?"
+    },
+    {
+      "name": "VFG",
+      "level": "vfg",
+      "pattern": "\\bVFG\\b"
+    },
+    {
+      "name": "PS_HOLD",
+      "level": "pshold",
+      "pattern": "\\bPS_HOLD\\b"
+    },
+    {
+      "name": "UEFI_SSH",
+      "level": "uefissh",
+      "pattern": "Received\\s+(?:GetCapabilities|GetDebugCardPresence|GetBoardIdEx|GetTdmBoardId|GetPcbaTestMode|ChangeBootPolicyBits|GetSecureBootFuseStatusCustomer|UefiEfiGetTime|UefiEfiSetTime|GetRuntimeMode|GetSamFwVersion|GetProductInfo|GetRestartReasonExt|GetRestartReason)\\b"
+    },
+    {
+      "name": "UEFI_SSH_SocDisplayTakeOver",
+      "level": "uefissh",
+      "pattern": "SOC\\s+display\\s+take\\s+over"
+    },
+    {
+      "name": "PD",
+      "level": "pd",
+      "pattern": "PD\\s+FW\\s+version\\s+is\\s+valid\\s*:.*"
+    }
+  ]
+}
