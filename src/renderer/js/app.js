@@ -1650,7 +1650,7 @@ async function anaPopulateHl() {
   sel.value = ana.hl || 'auto';
 }
 
-const ANA_RANK = { info: 1, intr: 1.5, warn: 2, error: 3 };
+const ANA_RANK = { info: 1, hwinfo: 1, fru: 1, socsn: 1, nvram: 1, gpio: 1, perf: 1, intr: 1.5, warn: 2, error: 3 };
 
 function anaHighlightLine(line, rules) {
   // Match against the RAW text (not HTML-escaped) so patterns can use real
@@ -2287,6 +2287,12 @@ function anaLevelLabel(level) {
   if (level === 'intr') return t('ana.intr', '中斷');
   if (level === 'uefissh') return t('ana.uefissh', 'UEFI_SSH');
   if (level === 'pd') return t('ana.pd', 'PD');
+  if (level === 'hwinfo') return t('ana.hwinfo', '硬體資訊');
+  if (level === 'fru') return t('ana.fru', 'FRU');
+  if (level === 'socsn') return t('ana.socsn2', 'SOC SN');
+  if (level === 'nvram') return t('ana.nvram', 'NVRAM');
+  if (level === 'gpio') return t('ana.gpio', 'GPIO');
+  if (level === 'perf') return t('ana.perf', 'UEFI Perf');
   if (anaIsMarkLevel(level)) return anaMarkLabel(level);
   return String(level || '').toUpperCase();
 }
