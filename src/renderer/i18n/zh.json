@@ -35,7 +35,7 @@
   "btn.clear": "清除",
   "btn.clear.title": "清空目前 LOG",
   "btn.exportSingle": "輸出此 LOG",
-  "btn.exportSingle.title": "只輸出目前這個 LOG（含實驗欄位表頭）到專案 LOG_OUTPUT",
+  "btn.exportSingle.title": "只輸出目前這個 LOG（含實驗欄位表頭）到輸出根目錄（留空則為 LOG_OUTPUT）",
   "toast.exportSingleOk": "已輸出此 LOG（含實驗表頭）到 LOG_OUTPUT",
   "log.type.ph": "LOG 種類，例如 UEFI",
   "log.content.ph": "在此貼上 LOG...",

@@ -139,9 +139,8 @@ async function exportLog(payload = {}) {
 
 /**
  * Export ONLY one LOG (the active tab) as a single .log file carrying the
- * experiment-field header on top. Always lands in the in-project LOG_OUTPUT
- * folder (ignores any custom output root) so a half-finished experiment can be
- * shared for confirmation before the full export.
+ * experiment-field header on top. Honors the custom Output Root when one is
+ * set, otherwise falls back to the default LOG_OUTPUT folder.
  * Returns { ok, single, targetDir, filePath, fileName, files } or { ok:false, error }.
  */
 async function exportSingleLog(payload = {}) {
@@ -151,6 +150,7 @@ async function exportSingleLog(payload = {}) {
     tester = '',
     testCase = '',
     notes = '',
+    outputBase = '',
     customFields = [],
     log = {},
     abbrevLen,
@@ -174,9 +174,9 @@ async function exportSingleLog(payload = {}) {
         .filter((f) => f.label || f.value)
     : [];
 
-  // Single-LOG output: a dedicated folder under the in-project LOG_OUTPUT,
-  // with the one .log file (carrying the experiment header) inside it.
-  const baseDir = defaultOutputDir();
+  // Single-LOG output: a dedicated folder under the chosen Output Root (or the
+  // default LOG_OUTPUT when none is set), with the one .log file inside.
+  const baseDir = outputBase && outputBase.trim() ? outputBase.trim() : defaultOutputDir();
   const now = new Date();
   const nameMax = Math.min(40, Math.max(1, parseInt(abbrevLen, 10) || 30));
   const folderName = `${dateStamp(now)}_${timeStamp4(now)}_${abbreviate(experimentName, nameMax)}_${typeName}`;

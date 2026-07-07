@@ -35,7 +35,7 @@
   "btn.clear": "Clear",
   "btn.clear.title": "Clear current LOG",
   "btn.exportSingle": "Export this LOG",
-  "btn.exportSingle.title": "Export only the current LOG (with the experiment header) to the in-project LOG_OUTPUT",
+  "btn.exportSingle.title": "Export only the current LOG (with the experiment header) to the Output Root (or LOG_OUTPUT if empty)",
   "toast.exportSingleOk": "This LOG exported (with header) to LOG_OUTPUT",
   "log.type.ph": "LOG type, e.g. UEFI",
   "log.content.ph": "Paste LOG here...",
