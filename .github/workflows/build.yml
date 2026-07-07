@@ -28,7 +28,7 @@ jobs:
 
       # electron-builder downloads a ~110 MB Electron binary; cache it between runs.
       - name: Cache Electron downloads
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~\AppData\Local\electron\Cache
