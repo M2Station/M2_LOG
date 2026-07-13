@@ -159,6 +159,12 @@
               <label for="outputBase"><span data-i18n="field.outputBase">輸出根目錄</span> <span class="opt" data-i18n="field.outputBase.opt">(選填)</span></label>
               <div style="display:flex; gap:8px; align-items:stretch;">
                 <input id="outputBase" type="text" data-i18n-ph="field.outputBase.ph" placeholder="留空 = 專案內 LOG_OUTPUT/" autocomplete="off" style="flex:1;" />
+                <button type="button" class="btn btn-ghost btn-sm" id="btnOpenBase" data-i18n-title="btn.openBase.title" title="開啟輸出根目錄">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                  </svg>
+                  <span data-i18n="btn.openBase">開啟</span>
+                </button>
                 <button type="button" class="btn btn-ghost btn-sm" id="btnBrowseBase" data-i18n="btn.browse">Browse...</button>
               </div>
               <small data-i18n="field.outputBase.note">可填絕對路徑，例如 D:\\Logs</small>
@@ -217,7 +223,7 @@
         <div class="analysis">
           <div class="analysis-toolbar">
             <button class="btn btn-ghost btn-sm" id="btnAnaBrowse" data-i18n="ana.browse">選擇 LOG 目錄</button>
-            <button class="btn btn-ghost btn-sm" id="btnAnaReset" data-i18n="ana.reset">回到輸出目錄</button>
+            <button class="btn btn-ghost btn-sm" id="btnAnaReset" data-i18n="ana.reset">切換到輸出根目錄</button>
             <button class="btn btn-ghost btn-sm" id="btnAnaRefresh" data-i18n="ana.refresh">重新整理</button>
             <button class="btn btn-ghost btn-sm" id="btnAnaOpen" data-i18n="ana.open">開啟資料夾</button>
             <code class="ana-path" id="anaPath"></code>
@@ -246,6 +252,24 @@
                   <span class="counter" id="anaViewMeta"></span>
                   <button class="btn btn-ghost btn-sm" id="btnAnaZoomOut" type="button" data-i18n-title="ana.zoomOut.title" title="縮小字級">A-</button>
                   <button class="btn btn-ghost btn-sm" id="btnAnaZoomIn" type="button" data-i18n-title="ana.zoomIn.title" title="放大字級">A+</button>
+                  <button class="btn btn-ghost btn-sm" id="btnAnaEdit" type="button" data-i18n-title="ana.edit.title" title="編輯此 LOG 檔案" disabled>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 20h9" />
+                      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z" />
+                    </svg>
+                    <span data-i18n="ana.edit">編輯</span>
+                  </button>
+                  <button class="btn btn-primary btn-sm" id="btnAnaSave" type="button" data-i18n-title="ana.save.title" title="儲存變更 (Ctrl+S)" hidden>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                      <polyline points="17 21 17 13 7 13 7 21" />
+                      <polyline points="7 3 7 8 15 8" />
+                    </svg>
+                    <span data-i18n="ana.save">儲存</span>
+                  </button>
+                  <button class="btn btn-ghost btn-sm" id="btnAnaCancel" type="button" data-i18n-title="ana.cancel.title" title="取消編輯 (Esc)" hidden>
+                    <span data-i18n="ana.cancel">取消</span>
+                  </button>
                   <button class="btn btn-ghost btn-sm" id="btnAnaCopy" data-i18n="ana.copy">複製</button>
                   <button class="btn btn-vscode btn-sm" id="btnAnaAI" data-i18n-title="ana.ai.title" title="在 VS Code 開啟新的 AI 對話，並自動帶入此 LOG">
                     <svg class="ai-spark" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
@@ -301,6 +325,7 @@
                 <div class="ana-scroll" id="anaScroll" tabindex="-1">
                   <div class="ana-code" id="anaViewContent"></div>
                 </div>
+                <textarea id="anaEditArea" class="ana-edit" spellcheck="false" autocomplete="off" wrap="off" hidden></textarea>
                 <div class="ana-ruler" id="anaRuler" hidden>
                   <div class="ana-ruler-ticks" id="anaRulerTicks"></div>
                   <div class="ana-ruler-view" id="anaRulerView"></div>

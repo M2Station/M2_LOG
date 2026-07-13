@@ -1016,6 +1016,35 @@ input[type="date"] {
   height: 0;
 }
 
+/* In-place editor overlay (LOG Analysis "Edit" mode). Covers the viewer with a
+   plain monospace textarea; font size follows the viewer zoom via inline style. */
+.ana-edit {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  border: 0;
+  border-top: 2px solid var(--accent);
+  resize: none;
+  padding: 8px 16px;
+  font-family: var(--font-code);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--panel);
+  white-space: pre;
+  overflow: auto;
+  outline: none;
+  tab-size: 4;
+  z-index: 6;
+}
+
+.ana-edit[hidden] {
+  display: none;
+}
+
 .ana-ruler {
   position: absolute;
   top: 0;

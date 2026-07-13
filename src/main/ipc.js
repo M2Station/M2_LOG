@@ -82,12 +82,14 @@ function registerIpc() {
     }
   });
 
-  // Native folder picker for the "Output Root" field.
-  ipcMain.handle('dialog:pickFolder', async (evt) => {
+  // Native folder picker for the "Output Root" field. An optional base path
+  // opens the dialog already positioned at that directory.
+  ipcMain.handle('dialog:pickFolder', async (evt, defaultPath) => {
     const win = BrowserWindow.fromWebContents(evt.sender);
-    const result = await dialog.showOpenDialog(win, {
-      properties: ['openDirectory', 'createDirectory'],
-    });
+    const opts = { properties: ['openDirectory', 'createDirectory'] };
+    const base = String(defaultPath || '').trim();
+    if (base) opts.defaultPath = base;
+    const result = await dialog.showOpenDialog(win, opts);
     if (result.canceled || !result.filePaths.length) return { ok: false, canceled: true };
     return { ok: true, path: result.filePaths[0] };
   });
@@ -175,6 +177,23 @@ function registerIpc() {
       } finally {
         await fh.close();
       }
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  // Write UTF-8 text back to an existing file (LOG Analysis in-place editor).
+  // Only existing regular files may be overwritten; no new paths are created.
+  ipcMain.handle('fs:writeText', async (_evt, payload) => {
+    try {
+      const p = String((payload && payload.path) || '');
+      if (!p) return { ok: false, error: 'No path' };
+      const st = await fsp.stat(p);
+      if (!st.isFile()) return { ok: false, error: 'Not a file' };
+      const content = payload && typeof payload.content === 'string' ? payload.content : '';
+      await fsp.writeFile(p, content, 'utf8');
+      const after = await fsp.stat(p);
+      return { ok: true, path: p, size: after.size };
     } catch (err) {
       return { ok: false, error: err.message };
     }
