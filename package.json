@@ -1,6 +1,6 @@
 {
   "name": "m2-log-tool",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Experiment LOG collector and exporter (UEFI / SAM) - Electron desktop app",
   "author": "OA Hsiao",
   "license": "MIT",
