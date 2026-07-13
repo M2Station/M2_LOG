@@ -22,6 +22,11 @@
       "pattern": "\\bboot\\s+failure\\b"
     },
     {
+      "name": "CriticalSocError",
+      "level": "error",
+      "pattern": "\\bCriticalSocError\\b"
+    },
+    {
       "name": "DebugSSH",
       "level": "debugssh",
       "pattern": "^\\s*\\.[a-z][a-z0-9_]*\\b"
