@@ -872,6 +872,18 @@ async function pickOutputBase() {
   }
 }
 
+/* ---------- Open the Output Root folder (falls back to LOG_OUTPUT) ---------- */
+async function openOutputBase() {
+  const base = $('#outputBase').value.trim();
+  try {
+    const data = await window.m2log.openFolder(base);
+    if (!data || !data.ok) throw new Error((data && data.error) || 'Open failed');
+    toast(t('toast.explorerOk'), 'info');
+  } catch (err) {
+    toast(t('toast.openFail') + err.message, 'error');
+  }
+}
+
 /* ---------- Reset fields to defaults ---------- */
 function resetFields() {
   formFields.forEach((f) => {
@@ -951,6 +963,7 @@ $('#btnExport').addEventListener('click', doExport);
 $('#btnExportSingle').addEventListener('click', doExportSingle);
 $('#btnOpenExplorer').addEventListener('click', () => openFolder(state.lastExportPath));
 $('#btnBrowseBase').addEventListener('click', pickOutputBase);
+$('#btnOpenBase').addEventListener('click', openOutputBase);
 $('#btnResetFields').addEventListener('click', resetFields);
 $('#btnNextExp').addEventListener('click', nextExperiment);
 $('#btnCopySummary').addEventListener('click', copySummary);
@@ -1009,6 +1022,8 @@ const ana = {
   hl: localStorage.getItem(ANA_HL_KEY) || 'auto',
   text: null,
   name: '',
+  path: '',
+  truncated: false,
   lines: null,
   font: clampAnaFont(parseFloat(localStorage.getItem(ANA_FONT_KEY))),
   // Fold (collapse) the runs of lines that carry no highlight, leaving only the
@@ -1080,6 +1095,8 @@ function anaApplyViewPrefs() {
     el.classList.add('nowrap');
     el.style.fontSize = ana.font + 'px';
   }
+  const editEl = document.getElementById('anaEditArea');
+  if (editEl) editEl.style.fontSize = ana.font + 'px';
   const fb = document.getElementById('btnAnaFold');
   if (fb) fb.classList.toggle('on', ana.fold);
 }
@@ -1446,9 +1463,13 @@ async function anaCopyTabPath(path) {
 
 // Reset the viewer to an empty state (used when the last tab is closed).
 function anaClearViewer() {
+  anaExitEdit();
   ana.text = null;
   ana.lines = null;
   ana.name = '';
+  ana.path = '';
+  ana.truncated = false;
+  anaSetEditEnabled(false);
   const content = document.getElementById('anaViewContent');
   if (content) content.textContent = '';
   const nameEl = document.getElementById('anaViewName');
@@ -1468,6 +1489,101 @@ function anaClearViewer() {
     localStorage.removeItem(ANA_FILE_KEY);
   } catch (e) {
     /* ignore */
+  }
+}
+
+/* ---------- In-place editor (Edit / Save) ---------- */
+// While editing, a plain <textarea> overlays the virtualized viewer. Saving
+// writes UTF-8 back to the same path and re-renders the viewer with the new
+// content. Truncated (very large) files are not editable — see anaViewFile.
+let anaEditing = false;
+
+// Enable/disable the Edit button and reflect why via its tooltip.
+function anaSetEditEnabled(on) {
+  const btn = document.getElementById('btnAnaEdit');
+  if (!btn) return;
+  btn.disabled = !on;
+  btn.title = on
+    ? t('ana.edit.title', '編輯此 LOG 檔案')
+    : ana.truncated
+    ? t('ana.edit.truncated', '檔案過大（已截斷），無法編輯')
+    : t('ana.edit.title', '編輯此 LOG 檔案');
+}
+
+// Show/hide the edit vs view controls for the current mode.
+function anaSetEditButtons(editing) {
+  const edit = document.getElementById('btnAnaEdit');
+  const save = document.getElementById('btnAnaSave');
+  const cancel = document.getElementById('btnAnaCancel');
+  if (edit) edit.hidden = editing;
+  if (save) save.hidden = !editing;
+  if (cancel) cancel.hidden = !editing;
+}
+
+function anaEnterEdit() {
+  if (anaEditing) return;
+  if (ana.text == null) {
+    toast(t('ana.edit.noLog', '請先開啟一個 LOG 再編輯'), 'error');
+    return;
+  }
+  if (ana.truncated) {
+    toast(t('ana.edit.truncated', '檔案過大（已截斷），無法編輯'), 'error');
+    return;
+  }
+  const ta = document.getElementById('anaEditArea');
+  const scroll = document.getElementById('anaScroll');
+  if (!ta) return;
+  anaEditing = true;
+  ta.value = ana.text;
+  ta.style.fontSize = ana.font + 'px';
+  ta.hidden = false;
+  if (scroll) scroll.hidden = true;
+  anaSetEditButtons(true);
+  ta.focus();
+  ta.setSelectionRange(0, 0);
+  ta.scrollTop = 0;
+}
+
+// Leave edit mode without saving (also used before opening another file).
+function anaExitEdit() {
+  if (!anaEditing) return;
+  anaEditing = false;
+  const ta = document.getElementById('anaEditArea');
+  const scroll = document.getElementById('anaScroll');
+  if (ta) {
+    ta.hidden = true;
+    ta.value = '';
+  }
+  if (scroll) scroll.hidden = false;
+  anaSetEditButtons(false);
+}
+
+async function anaSaveEdit() {
+  if (!anaEditing) return;
+  const ta = document.getElementById('anaEditArea');
+  const path = ana.path || anaActiveTab;
+  if (!ta || !path) return;
+  const newText = ta.value;
+  const save = document.getElementById('btnAnaSave');
+  if (save) save.disabled = true;
+  try {
+    const res = await window.m2log.writeText({ path, content: newText });
+    if (!res || !res.ok) throw new Error((res && res.error) || 'Save failed');
+    ana.text = newText;
+    ana.lines = null;
+    anaExitEdit();
+    anaInvalidateRulesCache();
+    const rules = await anaResolveRules(ana.name);
+    anaRenderContent(newText, rules);
+    const metaEl = document.getElementById('anaViewMeta');
+    if (metaEl) metaEl.textContent = formatBytes(res.size);
+    const sc = document.getElementById('anaScroll');
+    if (sc) sc.focus({ preventScroll: true });
+    toast(t('toast.saveOk', '已儲存變更'), 'success');
+  } catch (e) {
+    toast(t('toast.saveFail', '儲存失敗：') + e.message, 'error');
+  } finally {
+    if (save) save.disabled = false;
   }
 }
 
@@ -1511,6 +1627,7 @@ function anaClearViewer() {
 })();
 
 async function anaViewFile(entry, row) {
+  anaExitEdit();
   document.querySelectorAll('#anaTree .ana-row.selected').forEach((r) => r.classList.remove('selected'));
   if (row) row.classList.add('selected');
   $('#anaViewName').textContent = entry.name;
@@ -1544,8 +1661,11 @@ async function anaViewFile(entry, row) {
   }
   anaMark.terms = mkArr;
   ana.name = entry.name;
+  ana.path = entry.path;
+  ana.truncated = false;
   ana.text = null;
   ana.lines = null;
+  anaSetEditEnabled(false);
   content.textContent = t('ana.loading');
   const res = await window.m2log.readText(entry.path);
   if (!res || !res.ok) {
@@ -1555,7 +1675,11 @@ async function anaViewFile(entry, row) {
   let text = res.content;
   if (res.truncated) text += `\n\n... [${t('ana.truncated')}]`;
   ana.text = text;
+  ana.truncated = !!res.truncated;
   ana.lines = null;
+  // A truncated (very large) file cannot be edited safely: saving would write
+  // back the on-screen truncation marker and lose the rest of the file.
+  anaSetEditEnabled(!res.truncated);
   try {
     localStorage.setItem(ANA_FILE_KEY, entry.path);
   } catch (e) {
@@ -2571,7 +2695,8 @@ function anaBmGo(dir) {
 }
 
 $('#btnAnaBrowse').addEventListener('click', async () => {
-  const r = await window.m2log.pickFolder();
+  // Open the picker positioned at the current analysis directory as the base.
+  const r = await window.m2log.pickFolder(ana.root);
   if (r && r.ok && r.path) {
     ana.root = r.path;
     localStorage.setItem(ANA_ROOT_KEY, ana.root);
@@ -2579,8 +2704,15 @@ $('#btnAnaBrowse').addEventListener('click', async () => {
   }
 });
 $('#btnAnaReset').addEventListener('click', async () => {
-  const r = await window.m2log.logRoot();
-  if (r && r.ok && r.path) ana.root = r.path;
+  // Switch to the Output Root configured in the LOG_OUTPUT view. When that field
+  // is empty, fall back to the default LOG_OUTPUT directory.
+  const base = (($('#outputBase') && $('#outputBase').value) || '').trim();
+  if (base) {
+    ana.root = base;
+  } else {
+    const r = await window.m2log.logRoot();
+    if (r && r.ok && r.path) ana.root = r.path;
+  }
   localStorage.setItem(ANA_ROOT_KEY, ana.root);
   await anaRenderTree();
 });
@@ -2629,6 +2761,25 @@ $('#btnAnaOpen').addEventListener('click', () => {
   if (zout) zout.addEventListener('click', () => anaSetFont(ana.font - 1));
   const fold = document.getElementById('btnAnaFold');
   if (fold) fold.addEventListener('click', anaToggleFold);
+  // In-place editor controls.
+  const bEdit = document.getElementById('btnAnaEdit');
+  if (bEdit) bEdit.addEventListener('click', anaEnterEdit);
+  const bSave = document.getElementById('btnAnaSave');
+  if (bSave) bSave.addEventListener('click', anaSaveEdit);
+  const bCancel = document.getElementById('btnAnaCancel');
+  if (bCancel) bCancel.addEventListener('click', anaExitEdit);
+  const editArea = document.getElementById('anaEditArea');
+  if (editArea) {
+    editArea.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        anaSaveEdit();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        anaExitEdit();
+      }
+    });
+  }
 })();
 // Ctrl +/-/0 zooms the viewer font while the analysis view is active.
 document.addEventListener('keydown', (e) => {
