@@ -237,11 +237,11 @@ function sweepStaleChatTemps() {
 
 // Sanitize a LOG name into a safe on-disk file name. The temp file is named after
 // the real LOG so VS Code shows the actual name on the attachment chip (and seeds
-// the conversation title from it). Strips path separators / illegal characters
-// and any non-ASCII, guarantees a sensible extension.
+// the conversation title from it). Strips path separators / illegal characters and
+// control chars but KEEPS Unicode letters (incl. CJK); guarantees a sensible extension.
 function sanitizeFileName(name) {
   let s = String(name == null ? '' : name).trim();
-  s = s.replace(/[\\/:*?"<>|]+/g, '_').replace(/[^\x20-\x7E]+/g, '_').trim();
+  s = s.replace(/[\\/:*?"<>|]+/g, '_').replace(/[\u0000-\u001F]+/g, '_').trim();
   if (!s) s = 'log';
   if (!/\.[A-Za-z0-9]{1,8}$/.test(s)) s += '.txt';
   return s.slice(0, 120);

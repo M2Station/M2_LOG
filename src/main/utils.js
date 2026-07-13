@@ -11,19 +11,28 @@
 const fs = require('fs');
 const path = require('path');
 
-/** Experiment name must be English (letters/digits/space/_/-, at least one letter). */
-function isEnglishName(name) {
+/**
+ * A usable experiment name. Any language is allowed (Unicode letters/digits,
+ * including CJK) and written as UTF-8 on disk; the name is only rejected when it
+ * is blank or contains a character that is illegal in a Windows file/folder name.
+ */
+function isValidName(name) {
   if (!name || typeof name !== 'string') return false;
   const s = name.trim();
-  return /^[A-Za-z0-9 _-]+$/.test(s) && /[A-Za-z]/.test(s);
+  if (!s) return false;
+  // Reject Windows-illegal path characters and control chars.
+  if (/[<>:"/\\|?*\u0000-\u001F]/.test(s)) return false;
+  // Require at least one letter or digit (Unicode-aware; includes CJK).
+  return /[\p{L}\p{N}]/u.test(s);
 }
 
 /** Build an uppercase, underscore-joined folder abbreviation (default max 30 chars, no padding). */
 function abbreviate(name, max = 30) {
-  // Spaces / punctuation -> underscore, uppercase, collapse and trim underscores.
+  // Spaces / punctuation -> underscore; KEEP Unicode letters/digits (incl. CJK),
+  // written as UTF-8 on disk. Uppercase (a no-op for CJK), collapse/trim underscores.
   let s = String(name || '')
     .trim()
-    .replace(/[^A-Za-z0-9]+/g, '_')
+    .replace(/[^\p{L}\p{N}]+/gu, '_')
     .replace(/_+/g, '_')
     .replace(/^_+|_+$/g, '')
     .toUpperCase();
@@ -88,10 +97,11 @@ function buildHeader(meta, logType) {
 
 /** Convert a user-entered LOG type into a safe folder/file name (no path traversal). */
 function sanitizeType(type, max = 40) {
+  // Keep Unicode letters/digits (incl. CJK) plus . _ - ; everything else -> _.
   let s = String(type || '')
     .trim()
     .toUpperCase()
-    .replace(/[^A-Z0-9._-]+/g, '_')
+    .replace(/[^\p{L}\p{N}._-]+/gu, '_')
     .replace(/^[._-]+|[._-]+$/g, '');
   if (!s) s = 'LOG';
   const cap = Math.min(100, Math.max(1, parseInt(max, 10) || 40));
@@ -99,7 +109,7 @@ function sanitizeType(type, max = 40) {
 }
 
 module.exports = {
-  isEnglishName,
+  isValidName,
   abbreviate,
   dateStamp,
   timeStamp4,
