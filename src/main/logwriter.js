@@ -13,7 +13,7 @@ const path = require('path');
 const archiver = require('archiver');
 const { shell } = require('electron');
 const {
-  isEnglishName,
+  isValidName,
   abbreviate,
   dateStamp,
   timeStamp4,
@@ -60,8 +60,8 @@ async function exportLog(payload = {}) {
     typeLen,
   } = payload;
 
-  if (!isEnglishName(experimentName)) {
-    return { ok: false, error: 'Experiment name must be English.' };
+  if (!isValidName(experimentName)) {
+    return { ok: false, error: 'Experiment name is empty or contains illegal characters.' };
   }
 
   const cleanCustom = Array.isArray(customFields)
@@ -157,8 +157,8 @@ async function exportSingleLog(payload = {}) {
     typeLen,
   } = payload;
 
-  if (!isEnglishName(experimentName)) {
-    return { ok: false, error: 'Experiment name must be English.' };
+  if (!isValidName(experimentName)) {
+    return { ok: false, error: 'Experiment name is empty or contains illegal characters.' };
   }
 
   const content = String((log && log.content) || '');

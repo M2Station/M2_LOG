@@ -421,17 +421,21 @@ function escapeRegExp(s) {
 }
 
 /* ---------- Experiment name -> folder preview ---------- */
-function isEnglishName(name) {
+function isValidName(name) {
   const s = String(name || '').trim();
-  return /^[A-Za-z0-9 _-]+$/.test(s) && /[A-Za-z]/.test(s);
+  if (!s) return false;
+  // Reject Windows-illegal path characters and control chars.
+  if (/[<>:"/\\|?*\u0000-\u001F]/.test(s)) return false;
+  // Require at least one letter or digit (Unicode-aware; includes CJK).
+  return /[\p{L}\p{N}]/u.test(s);
 }
 
 // Same folder abbreviation rule as the main process (utils.js).
 function abbreviate(name, max = abbrevLen) {
-  // Spaces / punctuation -> underscore, uppercase, collapse and trim underscores.
+  // Spaces / punctuation -> underscore; KEEP Unicode letters/digits (incl. CJK).
   let s = String(name || '')
     .trim()
-    .replace(/[^A-Za-z0-9]+/g, '_')
+    .replace(/[^\p{L}\p{N}]+/gu, '_')
     .replace(/_+/g, '_')
     .replace(/^_+|_+$/g, '')
     .toUpperCase();
@@ -756,7 +760,7 @@ async function doExport() {
     $('#experimentName').focus();
     return;
   }
-  if (!isEnglishName(payload.experimentName)) {
+  if (!isValidName(payload.experimentName)) {
     toast(t('toast.nameEnglish'), 'error');
     $('#experimentName').focus();
     return;
@@ -802,7 +806,7 @@ async function doExportSingle() {
     $('#experimentName').focus();
     return;
   }
-  if (!isEnglishName(payload.experimentName)) {
+  if (!isValidName(payload.experimentName)) {
     toast(t('toast.nameEnglish'), 'error');
     $('#experimentName').focus();
     return;
