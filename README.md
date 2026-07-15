@@ -46,10 +46,15 @@ highlighting, search, bookmarks and an AI hand-off.
 - **AI** — open a new VS Code AI (Copilot) chat with the current LOG attached.
 
 ### Look & feel
-- **Settings (⚙)** — folder-name length (1–40), file-name length (1–100), and **theme**.
+- **Settings (⚙)** — folder-name length (1–40), file-name length (1–100), **theme**, and **check for updates**.
 - **Themes** — Daylight (Light), Low Key (Dark), VS Code (Dark), Army, Army (Dark).
 - **Bilingual** EN / 中 interface; the **app version** shows in the window title.
 - Draggable splitter between panels; form / custom fields / LOGs persist via `localStorage` (not cleared after export).
+
+### Updates
+- **Check for updates** — the **Settings (⚙)** panel has a **Check for Updates** button that queries the latest GitHub release and tells you whether you are up to date.
+- **Automatic check** — installed builds check once a day on startup and only prompt when a newer version is available.
+- **One-click update** — when a new version exists, the app shows the release notes, then **downloads** the installer matching your CPU architecture (x64 / ARM64) with a progress bar, **runs** it, and **deletes** the downloaded file afterwards. Per-user install, so no admin prompt.
 
 ---
 
@@ -130,7 +135,7 @@ the static self-tests.
 
 ```
 src/
-  main/      Electron main process (main / ipc / utils / paths / logwriter / vscodeChat)
+  main/      Electron main process (main / ipc / utils / paths / logwriter / vscodeChat / updater)
   preload/   contextBridge bridge (window.m2log)
   renderer/  index.html, css/styles.css, js/{app,themes}.js, i18n/{en,zh}.json
 highlight/   INTEL_UEFI.json / RUST_SAM.json highlight rules
@@ -198,10 +203,15 @@ package.json electron + electron-builder
 - **AI** — 開啟新的 VS Code AI（Copilot）對話並附上目前的 LOG。
 
 ### 外觀
-- **設定（⚙）** — 資料夾名稱長度（1–40）、檔名長度（1–100）與 **佈景主題**。
+- **設定（⚙）** — 資料夾名稱長度（1–40）、檔名長度（1–100）、**佈景主題** 與 **檢查更新**。
 - **佈景主題** — Daylight（淺色）、Low Key（深色）、VS Code（深色）、Army、Army（深色）。
 - **中 / 英雙語** 介面；**App 版本** 顯示在視窗標題列。
 - 左右面板中間可拖曳調整寬度；表單 / 自訂欄位 / LOG 透過 `localStorage` 記憶（輸出後不會被清空）。
+
+### 更新
+- **檢查更新** — **設定（⚙）** 面板有 **檢查更新** 按鈕，會查詢 GitHub 最新發行版並回報你是否已是最新版本。
+- **自動檢查** — 安裝版每天啟動時會檢查一次，只有在有新版本時才會提示。
+- **一鍵更新** — 有新版本時，App 會顯示發行說明，接著依你的 CPU 架構（x64 / ARM64）**下載** 對應安裝檔（含進度條）、**執行安裝**，並在安裝後**刪除下載檔**。採每位使用者安裝，無需系統管理員權限。
 
 ---
 
@@ -275,7 +285,7 @@ npm run dist
 
 ```
 src/
-  main/      Electron 主行程（main / ipc / utils / paths / logwriter / vscodeChat）
+  main/      Electron 主行程（main / ipc / utils / paths / logwriter / vscodeChat / updater）
   preload/   contextBridge 橋接（window.m2log）
   renderer/  index.html、css/styles.css、js/{app,themes}.js、i18n/{en,zh}.json
 highlight/   INTEL_UEFI.json / RUST_SAM.json 高亮規則
