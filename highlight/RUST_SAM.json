@@ -55,6 +55,11 @@
       "name": "PD",
       "level": "pd",
       "pattern": "PD\\s+FW\\s+version\\s+is\\s+valid\\s*:.*"
+    },
+    {
+      "name": "CMC_SRS_ResetReason",
+      "level": "reset",
+      "pattern": "CMC\\s+SRS\\s+reset\\s+reason\\s*:"
     }
   ]
 }
