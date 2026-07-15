@@ -1833,6 +1833,104 @@ body.ana-ruler-dragging .ana-ruler-view {
   margin-top: 16px;
 }
 
+/* ---------- Update (check / download / install) ---------- */
+.update-check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.update-status {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.update-status.ok {
+  color: var(--success);
+}
+
+.update-status.err {
+  color: var(--danger);
+}
+
+.update-msg {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.update-vers {
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.update-warn {
+  font-size: 12.5px;
+  color: var(--danger);
+}
+
+.update-notes {
+  margin-top: 12px;
+  max-height: 180px;
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.update-notes[hidden] {
+  display: none;
+}
+
+.update-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.update-progress.hidden {
+  display: none;
+}
+
+.update-bar {
+  flex: 1;
+  height: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg));
+  overflow: hidden;
+}
+
+.update-bar-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+.update-pct {
+  font-size: 12px;
+  color: var(--text-dim);
+  min-width: 3.5em;
+  text-align: right;
+}
+
+.update-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
 /* ---------- Buttons (M2_SCOUT tactile language) ---------- */
 .btn {
   display: inline-flex;

@@ -15,6 +15,7 @@ const { ipcMain, dialog, BrowserWindow, app, shell } = require('electron');
 const { exportLog, exportSingleLog, openFolder } = require('./logwriter');
 const { openInVSCodeChat } = require('./vscodeChat');
 const { defaultOutputDir, appBaseDir } = require('./paths');
+const { checkForUpdate, downloadUpdate, installUpdate } = require('./updater');
 
 /** Register all IPC handlers used by the renderer through the preload bridge. */
 function registerIpc() {
@@ -31,6 +32,35 @@ function registerIpc() {
       return true;
     } catch (e) {
       return false;
+    }
+  });
+
+  // Check GitHub Releases for a newer version than the running app.
+  ipcMain.handle('update:check', async () => {
+    try {
+      return { ok: true, ...(await checkForUpdate()) };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  // Download the chosen installer to the temp folder (progress via 'update:progress').
+  ipcMain.handle('update:download', async (evt, asset) => {
+    try {
+      const win = BrowserWindow.fromWebContents(evt.sender);
+      const filePath = await downloadUpdate(win, asset);
+      return { ok: true, filePath };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  // Launch the downloaded installer, then delete it after it exits (quits the app).
+  ipcMain.handle('update:install', async (_evt, filePath) => {
+    try {
+      return installUpdate(filePath);
+    } catch (err) {
+      return { ok: false, error: err.message };
     }
   });
 

@@ -361,6 +361,14 @@
         </div>
         <div class="modal-body">
           <div class="field">
+            <label><span data-i18n="settings.update">Updates</span> <span class="opt" data-i18n="settings.update.opt">Version</span></label>
+            <div class="update-check-row">
+              <button type="button" class="btn btn-ghost btn-sm" id="btnCheckUpdate" data-i18n="update.check">Check for Updates</button>
+              <span class="update-status" id="updateStatus"></span>
+            </div>
+            <small data-i18n="settings.update.note">Check GitHub for a newer release.</small>
+          </div>
+          <div class="field">
             <label for="setTheme"><span data-i18n="settings.theme">主題</span> <span class="opt" data-i18n="settings.theme.opt">Theme</span></label>
             <select id="setTheme" class="select-theme"></select>
             <small data-i18n="settings.theme.note">切換整體介面配色主題。</small>
@@ -375,6 +383,28 @@
             <label for="setTypeLen"><span data-i18n="settings.typeLen">檔案名稱長度</span> <span class="opt" data-i18n="settings.typeLen.opt">(1–100)</span></label>
             <input id="setTypeLen" type="number" min="1" max="100" step="1" />
             <small data-i18n="settings.typeLen.note">LOG 種類（檔名／子資料夾）的最大長度。</small>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Update modal -->
+    <div class="modal-overlay hidden" id="updateModal">
+      <div class="modal">
+        <div class="modal-head">
+          <h2 data-i18n="update.title">Update Available</h2>
+          <button class="btn-remove" id="btnUpdateClose" title="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="update-msg" id="updateMessage"></p>
+          <pre class="update-notes" id="updateNotes" hidden></pre>
+          <div class="update-progress hidden" id="updateProgress">
+            <div class="update-bar"><div class="update-bar-fill" id="updateBarFill"></div></div>
+            <span class="update-pct" id="updateProgressText">0%</span>
+          </div>
+          <div class="update-actions">
+            <button class="btn btn-ghost" id="btnUpdateLater" data-i18n="update.later">Later</button>
+            <button class="btn btn-primary" id="btnUpdateNow" data-i18n="update.now">Download &amp; Install</button>
           </div>
         </div>
       </div>

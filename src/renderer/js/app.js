@@ -3379,6 +3379,111 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeSettings();
 });
 
+/* ---------- Update (check / download / install) ---------- */
+let updateInfo = null;
+let updateBusy = false;
+
+function openUpdateModal() {
+  $('#updateModal').classList.remove('hidden');
+}
+function closeUpdateModal() {
+  if (updateBusy) return; // don't cancel a download in progress
+  $('#updateModal').classList.add('hidden');
+}
+
+function setUpdateStatus(text, kind) {
+  const el = $('#updateStatus');
+  if (!el) return;
+  el.textContent = text || '';
+  el.className = 'update-status' + (kind ? ' ' + kind : '');
+}
+
+function renderUpdateAvailable(info) {
+  updateInfo = info;
+  const detail = `${t('update.current')}: <b>v${escapeHtml(info.currentVersion)}</b> · ${t('update.latest')}: <b>v${escapeHtml(info.latestVersion)}</b>`;
+  const note = info.asset ? '' : `<br><span class="update-warn">${t('update.noAsset')}</span>`;
+  $('#updateMessage').innerHTML = `${t('update.availableMsg')}<br><span class="update-vers">${detail}</span>${note}`;
+  const notes = $('#updateNotes');
+  if (info.notes && info.notes.trim()) {
+    notes.textContent = info.notes.trim();
+    notes.hidden = false;
+  } else {
+    notes.hidden = true;
+  }
+  $('#updateProgress').classList.add('hidden');
+  $('#updateBarFill').style.width = '0%';
+  const nowBtn = $('#btnUpdateNow');
+  nowBtn.disabled = !info.asset;
+  nowBtn.classList.remove('loading');
+  $('#btnUpdateLater').disabled = false;
+  openUpdateModal();
+}
+
+async function checkForUpdateUI(manual) {
+  if (manual) setUpdateStatus(t('update.checking'));
+  try {
+    const r = await window.m2log.checkUpdate();
+    if (!r || !r.ok) throw new Error((r && r.error) || 'failed');
+    if (r.updateAvailable) {
+      if (manual) setUpdateStatus('');
+      renderUpdateAvailable(r);
+    } else if (manual) {
+      setUpdateStatus(t('update.upToDate'), 'ok');
+    }
+  } catch (err) {
+    if (manual) setUpdateStatus(t('update.failed') + err.message, 'err');
+  }
+}
+
+async function startUpdateDownload() {
+  if (!updateInfo || !updateInfo.asset || updateBusy) return;
+  updateBusy = true;
+  const nowBtn = $('#btnUpdateNow');
+  const laterBtn = $('#btnUpdateLater');
+  const prog = $('#updateProgress');
+  const fill = $('#updateBarFill');
+  const txt = $('#updateProgressText');
+  nowBtn.disabled = true;
+  nowBtn.classList.add('loading');
+  laterBtn.disabled = true;
+  prog.classList.remove('hidden');
+  fill.style.width = '0%';
+  txt.textContent = t('update.downloading');
+
+  const off = window.m2log.onUpdateProgress((d) => {
+    const pct = d && typeof d.pct === 'number' ? d.pct : 0;
+    fill.style.width = pct + '%';
+    txt.textContent = pct + '%';
+  });
+
+  try {
+    const r = await window.m2log.downloadUpdate(updateInfo.asset);
+    if (typeof off === 'function') off();
+    if (!r || !r.ok) throw new Error((r && r.error) || 'download failed');
+    fill.style.width = '100%';
+    txt.textContent = t('update.installing');
+    const ir = await window.m2log.installUpdate(r.filePath);
+    if (!ir || !ir.ok) throw new Error((ir && ir.error) || 'install failed');
+    // The installer is launching; this app will quit momentarily.
+  } catch (err) {
+    if (typeof off === 'function') off();
+    updateBusy = false;
+    nowBtn.disabled = false;
+    nowBtn.classList.remove('loading');
+    laterBtn.disabled = false;
+    prog.classList.add('hidden');
+    toast(t('update.downloadFailed') + err.message, 'error');
+  }
+}
+
+$('#btnCheckUpdate').addEventListener('click', () => checkForUpdateUI(true));
+$('#btnUpdateNow').addEventListener('click', startUpdateDownload);
+$('#btnUpdateLater').addEventListener('click', closeUpdateModal);
+$('#btnUpdateClose').addEventListener('click', closeUpdateModal);
+$('#updateModal').addEventListener('click', (e) => {
+  if (e.target === $('#updateModal')) closeUpdateModal();
+});
+
 /* ---------- Init ---------- */
 loadExperiments();
 restoreExpToDom(getActiveExp());
@@ -3398,5 +3503,21 @@ loadLang(currentLang);
     document.title = 'M2 LOG v' + v;
   } catch (e) {
     /* version is non-essential; ignore failures */
+  }
+})();
+
+// Silent update check on startup (installed builds only, at most once per day).
+// Only prompts when a newer release is available; failures are ignored.
+(async () => {
+  try {
+    const KEY = 'm2log_update_lastcheck';
+    const DAY = 24 * 60 * 60 * 1000;
+    const last = Number(localStorage.getItem(KEY) || 0);
+    if (Date.now() - last < DAY) return;
+    const r = await window.m2log.checkUpdate();
+    localStorage.setItem(KEY, String(Date.now()));
+    if (r && r.ok && r.updateAvailable && r.isPackaged) renderUpdateAvailable(r);
+  } catch (e) {
+    /* update check is best-effort; ignore failures */
   }
 })();

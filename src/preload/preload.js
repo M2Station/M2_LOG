@@ -14,6 +14,20 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('m2log', {
   appVersion: () => ipcRenderer.invoke('app:version'),
   setStartupBg: (color) => ipcRenderer.invoke('app:setStartupBg', color),
+  checkUpdate: () => ipcRenderer.invoke('update:check'),
+  downloadUpdate: (asset) => ipcRenderer.invoke('update:download', asset),
+  installUpdate: (filePath) => ipcRenderer.invoke('update:install', filePath),
+  onUpdateProgress: (cb) => {
+    const listener = (_e, data) => {
+      try {
+        cb(data);
+      } catch (err) {
+        /* ignore renderer callback errors */
+      }
+    };
+    ipcRenderer.on('update:progress', listener);
+    return () => ipcRenderer.removeListener('update:progress', listener);
+  },
   exportLog: (payload) => ipcRenderer.invoke('log:export', payload),
   exportSingleLog: (payload) => ipcRenderer.invoke('log:exportSingle', payload),
   openFolder: (targetPath) => ipcRenderer.invoke('log:openFolder', targetPath),
