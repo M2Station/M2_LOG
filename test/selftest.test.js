@@ -66,3 +66,22 @@ test('index.html has no duplicate element ids', () => {
   const dups = [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))];
   assert.deepStrictEqual(dups, [], `duplicate ids in index.html: ${dups.join(', ')}`);
 });
+
+test('context-menu: helper + NSIS hook are pure ASCII and cover the 3 HKCU classes', () => {
+  const ps1 = read('context-menu.ps1');
+  const nsh = read('build/installer.nsh');
+  // The Chinese menu label must live only as Unicode code points in the PS1, so
+  // both files stay pure ASCII and are never mangled by an editor / code page.
+  const nonAscii = (s) => [...s].filter((c) => c.charCodeAt(0) > 0x7f);
+  assert.deepStrictEqual(nonAscii(ps1), [], 'context-menu.ps1 must be pure ASCII');
+  assert.deepStrictEqual(nonAscii(nsh), [], 'build/installer.nsh must be pure ASCII');
+  // The PS1 registers, and the NSIS uninstall hook removes, the same 3 classes.
+  const classes = ['*\\shell\\', 'Directory\\shell\\', 'Directory\\Background\\shell\\'];
+  for (const c of classes) {
+    assert.ok(ps1.includes(c), `context-menu.ps1 should target ${c}`);
+    assert.ok(nsh.includes('Software\\Classes\\' + c + 'M2_LOG'), `installer.nsh should DeleteRegKey ${c}M2_LOG`);
+  }
+  // Install/uninstall wrappers exist for manual verification of the feature.
+  assert.ok(fs.existsSync(path.join(ROOT, 'INSTALL_CONTEXT_MENU.cmd')), 'INSTALL_CONTEXT_MENU.cmd missing');
+  assert.ok(fs.existsSync(path.join(ROOT, 'UNINSTALL_CONTEXT_MENU.cmd')), 'UNINSTALL_CONTEXT_MENU.cmd missing');
+});
