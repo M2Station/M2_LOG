@@ -1009,7 +1009,6 @@ const ANA_FOLDER_SVG =
   '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
 const ANA_FILE_SVG =
   '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
-const ANA_HL_KEY = 'm2log_ana_hl';
 const ANA_FONT_KEY = 'm2log_ana_font';
 const ANA_ROOT_KEY = 'm2log_ana_root';
 const ANA_FILE_KEY = 'm2log_ana_file';
@@ -1019,7 +1018,11 @@ function clampAnaFont(n) {
 }
 const ana = {
   root: '',
-  hl: localStorage.getItem(ANA_HL_KEY) || 'auto',
+  // Highlight-profile selection: 'auto' (default) guesses the best profile from
+  // the LOG file name; a concrete type pins that profile; 'none' turns it off.
+  // 'auto' re-detects per file (like editor language detection); a manual dropdown
+  // pick overrides only the currently open file.
+  hl: 'auto',
   text: null,
   name: '',
   path: '',
@@ -1662,6 +1665,9 @@ async function anaViewFile(entry, row) {
   anaMark.terms = mkArr;
   ana.name = entry.name;
   ana.path = entry.path;
+  // Auto-detect the highlight profile per file (like editor language detection):
+  // reset to 'auto' so each opened file is judged by its own name.
+  ana.hl = 'auto';
   ana.truncated = false;
   ana.text = null;
   ana.lines = null;
@@ -1687,6 +1693,7 @@ async function anaViewFile(entry, row) {
   }
   anaInvalidateRulesCache();
   const rules = await anaResolveRules(entry.name);
+  anaReflectHl(entry.name);
   anaRenderContent(text, rules);
   const sc = document.getElementById('anaScroll');
   if (sc) sc.focus({ preventScroll: true });
@@ -1718,15 +1725,62 @@ function anaCompileRules(ruleList) {
   return { compiled };
 }
 
-async function anaGetRules(filename) {
-  return anaGetRulesByType(anaDeriveType(filename));
+// Available highlight profiles (from /highlight), cached from listHighlights().
+let anaHlTypes = [];
+
+async function anaEnsureHlTypes() {
+  if (anaHlTypes.length) return anaHlTypes;
+  try {
+    const r = await window.m2log.listHighlights();
+    if (r && r.ok && Array.isArray(r.types)) anaHlTypes = r.types.slice();
+  } catch (e) {
+    /* ignore */
+  }
+  return anaHlTypes;
 }
 
-function anaDeriveType(filename) {
-  return String(filename || '')
+// Guess the best-fitting highlight profile from the LOG file name. Each profile
+// name is tokenized (e.g. INTEL_UEFI -> intel, uefi) and scored by how many of
+// its tokens appear in the compacted file name. Most hits wins, then highest
+// coverage ratio, then longest match. Returns '' when nothing matches.
+function anaGuessType(filename) {
+  const fnorm = String(filename || '')
+    .toLowerCase()
     .replace(/\.[^.]*$/, '')
-    .replace(/_\d+$/, '')
-    .toUpperCase();
+    .replace(/[^a-z0-9]+/g, '');
+  if (!fnorm) return '';
+  let best = '';
+  let bestHits = 0;
+  let bestRatio = 0;
+  let bestLen = 0;
+  anaHlTypes.forEach((ty) => {
+    const tokens = String(ty)
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(Boolean);
+    if (!tokens.length) return;
+    let hits = 0;
+    let matchLen = 0;
+    tokens.forEach((tok) => {
+      if (fnorm.includes(tok)) {
+        hits += 1;
+        matchLen += tok.length;
+      }
+    });
+    if (!hits) return;
+    const ratio = hits / tokens.length;
+    if (
+      hits > bestHits ||
+      (hits === bestHits && ratio > bestRatio) ||
+      (hits === bestHits && ratio === bestRatio && matchLen > bestLen)
+    ) {
+      best = ty;
+      bestHits = hits;
+      bestRatio = ratio;
+      bestLen = matchLen;
+    }
+  });
+  return best;
 }
 
 async function anaGetRulesByType(type) {
@@ -1748,7 +1802,18 @@ async function anaGetRulesByType(type) {
 async function anaResolveRules(filename) {
   if (ana.hl === 'none') return { compiled: [] };
   if (ana.hl && ana.hl !== 'auto') return anaGetRulesByType(ana.hl);
-  return anaGetRules(filename);
+  // Auto: guess the best-fitting profile from the file name.
+  await anaEnsureHlTypes();
+  const guess = anaGuessType(filename);
+  return guess ? anaGetRulesByType(guess) : { compiled: [] };
+}
+
+/** Show the effective profile in the dropdown (the guessed one when in auto). */
+function anaReflectHl(filename) {
+  const sel = $('#anaHlSelect');
+  if (!sel) return;
+  const val = ana.hl === 'auto' ? anaGuessType(filename) : ana.hl;
+  sel.value = val || 'none';
 }
 
 /** Fill the highlight-type selector: Auto + available types + Off. */
@@ -1762,8 +1827,11 @@ async function anaPopulateHl() {
   } catch (e) {
     /* ignore */
   }
+  anaHlTypes = types.slice();
+  // No "Auto" entry: the profile is auto-guessed from the LOG name (see
+  // anaResolveRules). The dropdown shows the guessed profile and lets the user
+  // override the current file, or turn highlighting Off.
   const opts = [
-    { v: 'auto', label: t('ana.hl.auto', '自動'), i18n: 'ana.hl.auto' },
     ...types.map((ty) => ({ v: ty, label: ty })),
     { v: 'none', label: t('ana.hl.none', '關閉'), i18n: 'ana.hl.none' },
   ];
@@ -1775,7 +1843,7 @@ async function anaPopulateHl() {
     if (o.i18n) el.setAttribute('data-i18n', o.i18n);
     sel.appendChild(el);
   });
-  sel.value = ana.hl || 'auto';
+  sel.value = ana.hl === 'auto' ? anaGuessType(ana.name || '') || 'none' : ana.hl;
 }
 
 const ANA_RANK = { info: 1, hwinfo: 1, fru: 1, socsn: 1, nvram: 1, gpio: 1, perf: 1, intr: 1.5, warn: 2, error: 3 };
@@ -2810,8 +2878,8 @@ document.addEventListener('keydown', (e) => {
   if (ana.root) window.m2log.openFolder(ana.root);
 });
 $('#anaHlSelect').addEventListener('change', async (e) => {
+  // Manual override for the current file only (auto re-detects on the next open).
   ana.hl = e.target.value || 'auto';
-  localStorage.setItem(ANA_HL_KEY, ana.hl);
   if (ana.text == null) return;
   const rules = await anaResolveRules(ana.name);
   anaRenderContent(ana.text, rules);

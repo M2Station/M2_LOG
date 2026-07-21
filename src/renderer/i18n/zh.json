@@ -79,7 +79,6 @@
   "ana.fold.lines": "已收折 {n} 行，點擊展開",
   "ana.fold.toBottom": "跳到此段最下緣",
   "ana.fold.toTop": "跳到此段最上緣",
-  "ana.hl.auto": "自動",
   "ana.hl.none": "關閉",
   "ana.copy": "複製",
   "ana.zoomIn.title": "放大字級 (Ctrl +)",

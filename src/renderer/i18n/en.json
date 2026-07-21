@@ -74,7 +74,6 @@
   "ana.tab.copied": "Path copied",
   "ana.tab.copyFail": "Copy failed",
   "ana.highlight": "Highlight",
-  "ana.hl.auto": "Auto",
   "ana.hl.none": "Off",
   "ana.fold": "Fold",
   "ana.fold.title": "Fold lines without highlights, showing only highlighted lines",
