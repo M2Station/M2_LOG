@@ -2407,6 +2407,10 @@ function anaLevelLabel(level) {
   if (level === 'info') return t('ana.info', '資訊');
   if (level === 'version') return t('ana.version', '版號');
   if (level === 'boot') return t('ana.boot', '開機點');
+  if (level === 'bootmode') return t('ana.bootmode', '開機模式');
+  if (level === 'capsule') return t('ana.capsule', 'Capsule');
+  if (level === 'screennotif') return t('ana.screennotif', '螢幕通知');
+  if (level === 'runtimemode') return t('ana.runtimemode', 'UEFI Runtime Mode');
   if (level === 'membucket') return t('ana.membucket', '記憶體配置');
   if (level === 'pwrseq') return t('ana.pwrseq', '電源序列');
   if (level === 'socss') return t('ana.socss', 'SoC子系統');

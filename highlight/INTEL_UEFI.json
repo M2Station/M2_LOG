@@ -27,6 +27,11 @@
       "pattern": "Commit\\s+SHA\\s*:.*"
     },
     {
+      "name": "BOOT_MODE",
+      "level": "bootmode",
+      "pattern": "System\\s+boot\\s+mode\\s*:.*"
+    },
+    {
       "name": "boot-fsp-t-car-init",
       "level": "boot",
       "pattern": "FSP-T\\s*:\\s*CAR\\s+Init"
@@ -35,6 +40,21 @@
       "name": "boot-exit-boot-services",
       "level": "boot",
       "pattern": "EBS\\s+completed\\s+successfully"
+    },
+    {
+      "name": "Capsule",
+      "level": "capsule",
+      "pattern": "(?:Attempting\\s+to\\s+apply\\s+Capsule|Fmp->SetImage).*"
+    },
+    {
+      "name": "Screen Notifications",
+      "level": "screennotif",
+      "pattern": "On\\s+Screen\\s+Notifications\\s*:.*"
+    },
+    {
+      "name": "UEFI Runtime Mode",
+      "level": "runtimemode",
+      "pattern": "UEFI\\s+Runtime\\s+Mode\\s*:.*"
     },
     {
       "name": "membucket-header",
