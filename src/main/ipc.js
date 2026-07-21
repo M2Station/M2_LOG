@@ -195,7 +195,10 @@ function registerIpc() {
       const p = String(filePath || '');
       const st = await fsp.stat(p);
       if (!st.isFile()) return { ok: false, error: 'Not a file' };
-      const MAX = 5 * 1024 * 1024;
+      // Cap the read so a runaway multi-GB log can't OOM the app. The viewer is
+      // virtualized (renders only the visible window), so large-but-sane logs
+      // load fine; 64 MB covers ~1M lines.
+      const MAX = 64 * 1024 * 1024;
       const len = Math.min(st.size, MAX);
       const fh = await fsp.open(p, 'r');
       try {
