@@ -1662,6 +1662,94 @@ async function anaSaveEdit() {
   });
 })();
 
+/* ---------- New LOG file ("+" on the tab strip) ---------- */
+// Suggest a unique, ready-to-use default name so the user can just press Enter.
+function anaDefaultFileName() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;
+  return `LOG_${stamp}.log`;
+}
+
+// Show/clear the inline validation message under the file-name field.
+function anaNewFileError(msg) {
+  const el = document.getElementById('newFileError');
+  if (!el) return;
+  el.textContent = msg || '';
+  el.hidden = !msg;
+}
+
+function openNewFileModal() {
+  if (!ana.root) {
+    toast(t('ana.newFile.noRoot', '請先選擇 LOG 目錄'), 'error');
+    return;
+  }
+  const dirEl = document.getElementById('newFileDir');
+  if (dirEl) dirEl.textContent = ana.root;
+  anaNewFileError('');
+  const modal = document.getElementById('newFileModal');
+  if (modal) modal.classList.remove('hidden');
+  const inp = document.getElementById('newFileName');
+  if (inp) {
+    inp.value = anaDefaultFileName();
+    inp.focus();
+    // Preselect the base name (before the extension) for a quick rename.
+    const dot = inp.value.lastIndexOf('.');
+    inp.setSelectionRange(0, dot > 0 ? dot : inp.value.length);
+  }
+}
+
+function closeNewFileModal() {
+  const modal = document.getElementById('newFileModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+// Create an empty file in the current LOG folder, then open it in a tab and
+// drop straight into edit mode so content can be pasted/typed and saved.
+async function anaCreateNewFile() {
+  const inp = document.getElementById('newFileName');
+  const btn = document.getElementById('btnNewFileCreate');
+  if (!inp || !ana.root) return;
+  let name = inp.value.trim();
+  if (!name) {
+    anaNewFileError(t('ana.newFile.empty', '請輸入檔案名稱'));
+    inp.focus();
+    return;
+  }
+  // Mirror the main-side guard so the user gets an inline message rather than a
+  // rejected IPC round-trip.
+  if (/[\\/]/.test(name) || name === '.' || name === '..') {
+    anaNewFileError(t('ana.newFile.invalid', '檔案名稱無效'));
+    inp.focus();
+    return;
+  }
+  // Append a default .log extension when the user typed a bare name.
+  if (!/\.[^.]+$/.test(name)) name += '.log';
+  if (btn) btn.disabled = true;
+  try {
+    const res = await window.m2log.createFile({ dir: ana.root, name, content: '' });
+    if (res && res.exists) {
+      anaNewFileError(t('ana.newFile.exists', '檔案已存在'));
+      inp.focus();
+      return;
+    }
+    if (!res || !res.ok) throw new Error((res && res.error) || 'Create failed');
+    closeNewFileModal();
+    await anaRenderTree();
+    const entry = { name: res.name || name, path: res.path };
+    if (!anaTabs.some((tb) => tb.path === entry.path)) anaTabs.push(entry);
+    anaActiveTab = entry.path;
+    anaRenderTabs();
+    await anaViewFile(entry, anaFindRowByPath(entry.path));
+    anaEnterEdit();
+    toast(t('ana.newFile.created', '已建立 LOG 檔案'), 'success');
+  } catch (e) {
+    anaNewFileError(t('ana.newFile.fail', '建立失敗：') + e.message);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 async function anaViewFile(entry, row) {
   anaExitEdit();
   document.querySelectorAll('#anaTree .ana-row.selected').forEach((r) => r.classList.remove('selected'));
@@ -2824,6 +2912,24 @@ $('#btnAnaReset').addEventListener('click', async () => {
 $('#btnAnaRefresh').addEventListener('click', anaRenderTree);
 $('#btnAnaOpen').addEventListener('click', () => {
   if (ana.root) window.m2log.openFolder(ana.root);
+});
+// New LOG file ("+" on the tab strip): create it in the current LOG folder.
+$('#btnAnaNewFile').addEventListener('click', openNewFileModal);
+$('#btnNewFileClose').addEventListener('click', closeNewFileModal);
+$('#btnNewFileCancel').addEventListener('click', closeNewFileModal);
+$('#btnNewFileCreate').addEventListener('click', anaCreateNewFile);
+$('#newFileModal').addEventListener('click', (e) => {
+  if (e.target === $('#newFileModal')) closeNewFileModal();
+});
+$('#newFileName').addEventListener('input', () => anaNewFileError(''));
+$('#newFileName').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    anaCreateNewFile();
+  } else if (e.key === 'Escape') {
+    e.preventDefault();
+    closeNewFileModal();
+  }
 });
 (() => {
   const inp = document.getElementById('anaFilterInput');

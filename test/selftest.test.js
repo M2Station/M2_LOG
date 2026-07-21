@@ -85,3 +85,31 @@ test('context-menu: helper + NSIS hook are pure ASCII and cover the 3 HKCU class
   assert.ok(fs.existsSync(path.join(ROOT, 'INSTALL_CONTEXT_MENU.cmd')), 'INSTALL_CONTEXT_MENU.cmd missing');
   assert.ok(fs.existsSync(path.join(ROOT, 'UNINSTALL_CONTEXT_MENU.cmd')), 'UNINSTALL_CONTEXT_MENU.cmd missing');
 });
+
+test('new LOG file: the "+" wiring is coherent across preload / ipc / html / app', () => {
+  const preload = read('src/preload/preload.js');
+  const ipc = read('src/main/ipc.js');
+  const html = read('src/renderer/index.html');
+  const app = read('src/renderer/js/app.js');
+  // Preload exposes createFile bound to the fs:createFile channel.
+  assert.ok(
+    /createFile:\s*\(payload\)\s*=>\s*ipcRenderer\.invoke\('fs:createFile'/.test(preload),
+    'preload must expose createFile -> fs:createFile'
+  );
+  // Main registers the channel, refuses to clobber (wx flag) and blocks traversal.
+  assert.ok(ipc.includes("ipcMain.handle('fs:createFile'"), 'ipc must register fs:createFile');
+  assert.ok(ipc.includes("fsp.open(full, 'wx')"), 'fs:createFile must use the wx flag (no clobber)');
+  assert.ok(ipc.includes("name === '..'"), 'fs:createFile must block parent-dir traversal');
+  // The "+" button and the modal (with create / cancel) exist in the DOM.
+  assert.ok(html.includes('id="btnAnaNewFile"'), 'index.html missing the "+" new-file button');
+  for (const id of ['newFileModal', 'newFileName', 'btnNewFileCreate', 'btnNewFileCancel']) {
+    assert.ok(html.includes(`id="${id}"`), `index.html missing #${id}`);
+  }
+  // The renderer flow creates the file via the exposed API and opens the modal.
+  assert.ok(app.includes('window.m2log.createFile('), 'app.js must call window.m2log.createFile');
+  assert.ok(
+    app.includes('openNewFileModal') && app.includes('anaCreateNewFile'),
+    'app.js must wire the new-file modal (open + create)'
+  );
+});
+

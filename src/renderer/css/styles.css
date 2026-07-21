@@ -785,18 +785,49 @@ input[type="date"] {
 }
 
 /* ---------- Viewer tabs (open multiple LOG files) ---------- */
+.ana-tabbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 6px 8px 0;
+}
+
 .ana-tabs {
   display: flex;
   align-items: stretch;
   gap: 4px;
   flex-wrap: nowrap;
   overflow-x: auto;
-  padding: 6px 8px 0;
+  min-width: 0;
+  flex: 1 1 auto;
   scrollbar-width: thin;
 }
 
 .ana-tabs.empty {
   display: none;
+}
+
+/* Persistent "+" that creates a new LOG file in the current folder. Stays put
+   even when no tabs are open, so a new folder can be seeded straight away. */
+.ana-tab-new {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  background: var(--tabbar-bg);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  color: var(--text-dim);
+  border-radius: 8px 8px 0 0;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.ana-tab-new:hover {
+  color: var(--text);
+  background: var(--row-hover);
 }
 
 .ana-tab {
@@ -1929,6 +1960,23 @@ body.ana-ruler-dragging .ana-ruler-view {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 20px;
+}
+
+/* Button row for the New LOG file modal. */
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+/* Inline validation message under a modal field (e.g. duplicate file name). */
+.field-error {
+  color: var(--danger);
+}
+
+.field-error[hidden] {
+  display: none;
 }
 
 /* ---------- Buttons (M2_SCOUT tactile language) ---------- */
