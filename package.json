@@ -29,7 +29,8 @@
       {
         "from": "highlight",
         "to": "highlight"
-      }
+      },
+      "context-menu.ps1"
     ],
     "win": {
       "target": [

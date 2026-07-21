@@ -42,4 +42,18 @@ contextBridge.exposeInMainWorld('m2log', {
   loadHighlight: (type) => ipcRenderer.invoke('hl:load', type),
   listHighlights: () => ipcRenderer.invoke('hl:list'),
   loadI18n: (lang) => ipcRenderer.invoke('i18n:load', lang),
+  // Explorer right-click "Analyze with M2 LOG": the path passed on the command
+  // line (pulled once after boot), plus later right-clicks (second-instance).
+  getInitialTarget: () => ipcRenderer.invoke('app:getInitialTarget'),
+  onOpenTarget: (cb) => {
+    const listener = (_e, target) => {
+      try {
+        cb(target);
+      } catch (err) {
+        /* ignore renderer callback errors */
+      }
+    };
+    ipcRenderer.on('app:openTarget', listener);
+    return () => ipcRenderer.removeListener('app:openTarget', listener);
+  },
 });

@@ -1088,6 +1088,39 @@ async function anaEnsureInit() {
   }
 }
 
+// Switch the top-level UI to the LOG Analysis tab (used when a path is handed
+// in from outside, e.g. the Explorer right-click menu).
+function anaActivateTab() {
+  document.querySelectorAll('.feature-tab').forEach((tb) => {
+    tb.classList.toggle('active', tb.dataset.view === 'analysis');
+  });
+  document.querySelectorAll('.feature-view').forEach((v) => v.classList.remove('active'));
+  const view = document.getElementById('view-analysis');
+  if (view) view.classList.add('active');
+  window.dispatchEvent(new Event('resize'));
+}
+
+// Open a file or folder handed in from outside the app (Explorer right-click
+// "Analyze with M2 LOG"): switch to LOG Analysis, point the tree at the path
+// (the file's parent folder when a file), and open the file in the viewer.
+async function anaOpenExternalPath(target) {
+  if (!target || !target.path) return;
+  anaActivateTab();
+  await anaEnsureInit();
+  const p = String(target.path);
+  const root = target.isDir ? p : p.replace(/[\\/][^\\/]*$/, '') || p;
+  ana.root = root;
+  try {
+    localStorage.setItem(ANA_ROOT_KEY, ana.root);
+  } catch (e) {
+    /* ignore */
+  }
+  await anaRenderTree();
+  if (!target.isDir) {
+    anaOpenTab({ name: p.split(/[\\/]/).pop(), path: p }, anaFindRowByPath(p));
+  }
+}
+
 // Apply persisted viewer preferences (word-wrap + font size) and reflect the
 // wrap state on its toolbar toggle.
 function anaApplyViewPrefs() {
@@ -3593,3 +3626,20 @@ loadLang(currentLang);
     /* update check is best-effort; ignore failures */
   }
 })();
+
+// Explorer right-click "Analyze with M2 LOG": open the file/folder passed on the
+// command line, and honour later right-clicks forwarded from a second instance.
+(async () => {
+  try {
+    if (!window.m2log || !window.m2log.getInitialTarget) return;
+    const target = await window.m2log.getInitialTarget();
+    if (target && target.path) anaOpenExternalPath(target);
+  } catch (e) {
+    /* no CLI target; normal launch */
+  }
+})();
+if (window.m2log && typeof window.m2log.onOpenTarget === 'function') {
+  window.m2log.onOpenTarget((target) => {
+    if (target && target.path) anaOpenExternalPath(target);
+  });
+}
