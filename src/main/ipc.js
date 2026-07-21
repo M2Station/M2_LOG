@@ -232,6 +232,42 @@ function registerIpc() {
     }
   });
 
+  // Create a NEW text file inside an existing folder (LOG Analysis "+" / new
+  // LOG). The name must be a single plain file name: path separators, parent
+  // refs and control chars are rejected, and the resolved path is verified to
+  // stay inside the folder so a crafted name cannot escape it. Uses the 'wx'
+  // flag so an existing file is never clobbered.
+  ipcMain.handle('fs:createFile', async (_evt, payload) => {
+    try {
+      const dir = String((payload && payload.dir) || '');
+      const name = String((payload && payload.name) || '').trim();
+      if (!dir) return { ok: false, error: 'No folder' };
+      if (!name) return { ok: false, error: 'No name' };
+      if (/[\\/]/.test(name) || name === '.' || name === '..' || /[\u0000-\u001f]/.test(name)) {
+        return { ok: false, error: 'Invalid file name' };
+      }
+      const st = await fsp.stat(dir);
+      if (!st.isDirectory()) return { ok: false, error: 'Not a directory' };
+      const full = path.join(dir, name);
+      const rel = path.relative(dir, full);
+      if (rel !== name || rel.startsWith('..') || path.isAbsolute(rel)) {
+        return { ok: false, error: 'Invalid file name' };
+      }
+      const content = payload && typeof payload.content === 'string' ? payload.content : '';
+      const fh = await fsp.open(full, 'wx'); // create; fail if it already exists
+      try {
+        await fh.writeFile(content, 'utf8');
+      } finally {
+        await fh.close();
+      }
+      const after = await fsp.stat(full);
+      return { ok: true, path: full, name: path.basename(full), size: after.size };
+    } catch (err) {
+      if (err && err.code === 'EEXIST') return { ok: false, exists: true, error: 'File already exists' };
+      return { ok: false, error: err.message };
+    }
+  });
+
   // Load highlight rules for a LOG type from <appBaseDir>/highlight/<TYPE>.json.
   ipcMain.handle('hl:load', async (_evt, type) => {
     try {

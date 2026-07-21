@@ -245,7 +245,12 @@
             </aside>
             <div class="splitter" id="anaSplitter" data-i18n-title="splitter.title" title="拖曳調整左右寬度"></div>
             <section class="panel ana-view-panel">
-              <div class="ana-tabs empty" id="anaTabs"></div>
+              <div class="ana-tabbar" id="anaTabBar">
+                <div class="ana-tabs empty" id="anaTabs"></div>
+                <button class="ana-tab-new" id="btnAnaNewFile" type="button" data-i18n-title="ana.newFile.title" title="新增 LOG 檔案（存到左側 LOG 目錄）" aria-label="新增 LOG 檔案">
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </button>
+              </div>
               <div class="panel-head">
                 <h2 id="anaViewName" data-i18n="ana.viewer">檢視</h2>
                 <div class="log-tools">
@@ -405,6 +410,28 @@
           <div class="update-actions">
             <button class="btn btn-ghost" id="btnUpdateLater" data-i18n="update.later">Later</button>
             <button class="btn btn-primary" id="btnUpdateNow" data-i18n="update.now">Download &amp; Install</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- New LOG file modal (LOG Analysis "+") -->
+    <div class="modal-overlay hidden" id="newFileModal">
+      <div class="modal">
+        <div class="modal-head">
+          <h2 data-i18n="ana.newFile.title">新增 LOG 檔案</h2>
+          <button class="btn-remove" id="btnNewFileClose" title="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label for="newFileName"><span data-i18n="ana.newFile.name">檔案名稱</span> <span class="req">*</span></label>
+            <input id="newFileName" type="text" autocomplete="off" spellcheck="false" data-i18n-ph="ana.newFile.ph" placeholder="e.g. boot.log" />
+            <small><span data-i18n="ana.newFile.saveTo">將建立於：</span><code id="newFileDir"></code></small>
+            <small class="field-error" id="newFileError" hidden></small>
+          </div>
+          <div class="modal-actions">
+            <button class="btn btn-ghost" id="btnNewFileCancel" data-i18n="ana.newFile.cancel">取消</button>
+            <button class="btn btn-primary" id="btnNewFileCreate" data-i18n="ana.newFile.create">建立</button>
           </div>
         </div>
       </div>
