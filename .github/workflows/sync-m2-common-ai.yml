@@ -1,0 +1,52 @@
+name: Sync M2 Common AI
+
+# 從中央 repo 同步 Copilot 設定到本 repo。放置路徑：.github/workflows/sync-m2-common-ai.yml
+#
+# 這是一支「stub」：真正的同步邏輯全部放在中央的 reusable workflow，
+# 本檔只負責「何時觸發」與「給什麼權限」，之後幾乎不用再改。
+#   → 升 action 版本、改同步邏輯、改 assignee，都只改中央那支，下游下次排程自動生效。
+#   → 中央 reusable：.github/workflows/sync-m2-common-ai-reusable.yml
+#
+# ── 需要的設定：無 ────────────────────────────────────────────────────
+#   中央 repo 為 public，不需要 token / secret / variable。
+#   唯一要開的權限（org 或 repo 層級皆可）：
+#     Settings → Actions → General → Workflow permissions
+#     → 勾選 Allow GitHub Actions to create and approve pull requests
+#   本 repo 可為 private，不受影響。
+#
+#   非預設中央 repo（fork）：改下方 uses: 的 owner/name，或設 vars.CENTRAL_AI_REPO 覆寫內容來源。
+# ─────────────────────────────────────────────────────────────────────
+
+on:
+  schedule:
+    # 台灣時間 (UTC+8) 每天 05:00 與 17:00 各檢查一次；GitHub cron 以 UTC 計算，
+    # 換算：05:00 UTC+8 = 21:00 UTC（前一日）、17:00 UTC+8 = 09:00 UTC。
+    - cron: '0 9,21 * * *'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: '中央 repo 的 branch / tag（預設 main）'
+        required: false
+        default: 'main'
+
+# 這些權限會向下傳遞給被呼叫的 reusable workflow 的 GITHUB_TOKEN。
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+# 同一時間只允許一個同步在跑，避免排程與手動觸發並發操作 chore/sync-m2-common-ai 分支而衝突。
+concurrency:
+  group: sync-m2-common-ai
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    # 同步邏輯的 single source of truth 在中央 reusable workflow。
+    # pin @main = 永遠跟最新；要控制「一改壞全下游」的爆炸半徑，可改 pin 到 tag，例如 @v1。
+    uses: M2Station/M2_COMMON_AI/.github/workflows/sync-m2-common-ai-reusable.yml@main
+    with:
+      ref: ${{ inputs.ref || 'main' }}
+      # 覆寫內容來源 repo 或 assignee：設 repo/org variable 即可，下游檔案不用動。
+      central_repo: ${{ vars.CENTRAL_AI_REPO || 'M2Station/M2_COMMON_AI' }}
+      assignees: ${{ vars.SYNC_PR_ASSIGNEES || 'oahsiao' }}

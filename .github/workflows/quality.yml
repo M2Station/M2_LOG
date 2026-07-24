@@ -58,8 +58,13 @@ jobs:
         run: |
           # These files have repeatedly broken cmd / NSIS / YAML parsing when they
           # picked up literal non-ASCII bytes. Keep them pure ASCII.
+          # Exception: sync-m2-common-*.yml are stubs synced verbatim from the central
+          # M2_COMMON_AI repo and intentionally carry localized (UTF-8) comments. YAML
+          # comments do not affect Actions parsing, so they are exempt from this guard.
           $targets = @('M2_LOG.cmd')
-          $targets += Get-ChildItem .github/workflows -Filter *.yml | Select-Object -ExpandProperty FullName
+          $targets += Get-ChildItem .github/workflows -Filter *.yml |
+            Where-Object { $_.Name -notlike 'sync-m2-common-*' } |
+            Select-Object -ExpandProperty FullName
           $fail = $false
           foreach ($t in $targets) {
             if (-not (Test-Path $t)) { continue }
